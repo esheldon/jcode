@@ -1,6 +1,6 @@
 module shape
 
-export Shape, ShapeG, shape_set_g!, shape_set_e!, shape_set_eta!
+export Shape, ShapeG, shape_set_g!, shape_set_e!, shape_set_eta!, shear
 
 typealias ShapeFloat Float64
 
@@ -41,6 +41,37 @@ end
 
 (-)(self::Shape) = ShapeG(-self.g1, -self.g2)
 
+# shear comes second
+function (+)(self::Shape, sh::Shape)
+
+    sout = Shape()
+
+    oneplusedot = 1.0 + self.e1*sh.e1 + self.e2*sh.e2
+
+    if sh.e1 == 0 && sh.e2 == 0
+        # adding nothing
+        sout = deepcopy(self)
+    elseif oneplusedot != 0
+        # result is not round
+        esq = sh.e1^2 + sh.e2^2
+
+        fac = (1.0 - sqrt(1.0-esq))/esq
+
+        e1 = self.e1 + sh.e1 + sh.e2*fac*(self.e2*sh.e1 - self.e1*sh.e2)
+        e2 = self.e2 + sh.e2 + sh.e1*fac*(self.e1*sh.e2 - self.e2*sh.e1)
+
+        e1 /= oneplusedot
+        e2 /= oneplusedot
+
+        shape_set_e!(sout, e1, e2)
+    end
+
+    return sout
+
+end
+
+
+# set the shape given g1,g2 keeping e and eta consistent
 function shape_set_g!(self::Shape, g1::ShapeFloat, g2::ShapeFloat)
 
     self.g1=g1
@@ -75,6 +106,7 @@ function shape_set_g!(self::Shape, g1::ShapeFloat, g2::ShapeFloat)
 
 end
 
+# set the shape given e1,e2 keeping g and eta consistent
 function shape_set_e!(self::Shape, e1::ShapeFloat, e2::ShapeFloat)
 
     self.e1=e1
@@ -110,6 +142,7 @@ function shape_set_e!(self::Shape, e1::ShapeFloat, e2::ShapeFloat)
 
 end
 
+# set the shape given eta1,eta2 keeping g and e consistent
 function shape_set_eta!(self::Shape, eta1::ShapeFloat, eta2::ShapeFloat)
 
     self.eta1=eta1
@@ -148,34 +181,6 @@ function shape_set_eta!(self::Shape, eta1::ShapeFloat, eta2::ShapeFloat)
 
 end
 
-
-function (+)(self::Shape, s::Shape)
-
-    sout = Shape()
-
-    oneplusedot = 1.0 + self.e1*s.e1 + self.e2*s.e2
-
-    if s.e1 == 0 && s.e2 == 0
-        # adding nothing
-        sout = deepcopy(self)
-    elseif oneplusedot != 0
-        # result is not round
-        esq = s.e1^2 + s.e2^2
-
-        fac = (1.0 - sqrt(1.0-esq))/esq
-
-        e1 = self.e1 + s.e1 + s.e2*fac*(self.e2*s.e1 - self.e1*s.e2)
-        e2 = self.e2 + s.e2 + s.e1*fac*(self.e1*s.e2 - self.e2*s.e1)
-
-        e1 /= oneplusedot
-        e2 /= oneplusedot
-
-        shape_set_e!(sout, e1, e2)
-    end
-
-    return sout
-
-end
 
 
 
