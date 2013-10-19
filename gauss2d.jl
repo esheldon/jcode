@@ -1,8 +1,8 @@
 module gauss2d
 
-export Gauss2D, gauss2d_set!, gauss2d_eval
-
 import mfloat.MFloat
+
+export Gauss2D
 
 # this is so we can add a new method
 # note we don't have to export if a method on
@@ -46,7 +46,7 @@ type Gauss2D
                      iyy::MFloat)
         self=Gauss2D()
 
-        gauss2d_set!(self,p,y,x,iyy,ixy,ixx)
+        set!(self,p,y,x,iyy,ixy,ixx)
 
         return self
     end
@@ -61,7 +61,7 @@ end
 function show(s::Gauss2D; stream=STDOUT)
     println(stream,string(s))
 end
-function gauss2d_set!(self::Gauss2D,
+function set!(self::Gauss2D,
               p::MFloat,
               x::MFloat,
               y::MFloat,
@@ -92,7 +92,7 @@ function gauss2d_set!(self::Gauss2D,
     return self
 end
 
-function gauss2d_eval(self::Gauss2D, x::MFloat, y::MFloat; max_chi2::MFloat = 100.0)
+function eval(self::Gauss2D, x::MFloat, y::MFloat; max_chi2::MFloat = 100.0)
     u = y-self.y
     v = x-self.x
 

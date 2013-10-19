@@ -2,7 +2,7 @@ module shape
 
 using mfloat
 
-export Shape, ShapeG, ShapeE, ShapeEta, set_g!, set_e!, set_eta!, shear!
+export Shape
 
 type Shape
     g1::MFloat
