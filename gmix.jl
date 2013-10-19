@@ -1,16 +1,21 @@
 module gmix
 
-# will extend length
+# will add methods to these
 import Base.length, Base.fill!
-import Base.show
+import Base.show, Base.start, Base.next, Base.done
 
 import mfloat.MFloat
 using gauss2d
 using shape
 
 export GMix,
-       length,
        GMixModel,
+       gmix_eval,
+       gmix_get_cen,
+       gmix_set_cen!,
+       gmix_get_T,
+       gmix_get_psum,
+       gmix_set_psum!,
        gmix_simple_zeros,
        gmix_new_model,
        GMIX_GAUSS,
@@ -62,7 +67,7 @@ type GMixPars
                         """))
         end
 
-        # the current convention is to alwasy have g1,g2 in the
+        # the current convention is to always have g1,g2 in the
         # 3 4 slots
         # note for GMIX_FULL this would not make sense, as they can
         # have different shapes
@@ -73,13 +78,93 @@ type GMixPars
 
 end
 
+# indexing and iteration
 getindex(self::GMix, ind::Int) = self.data[ind]
 length(self::GMix) = length(self.data)
+start(self::GMix) = start(self.data)
+next(self::GMix, i) = next(self.data,i)
+done(self::GMix, i) = done(self.data,i)
+
 function show(self::GMix; stream=STDOUT)
     for g in self.data
         show(g, stream=stream)
     end
 end
+
+function gmix_eval(self::GMix, x::MFloat, y::MFloat; max_chi2::MFloat = 100.0)
+    val::MFloat = 0.0
+
+    for g in self
+        val += gauss2d_eval(g, x, y, max_chi2=max_chi2)
+    end
+
+    return val
+end
+
+function gmix_get_cen(self::GMix)
+    x::MFloat = 0
+    y::MFloat = 0
+    psum::MFloat = 0
+
+    for g in self
+        psum += g.p
+        x += g.p*g.x
+        y += g.p*g.y
+    end
+
+    x /= psum
+    y /= psum
+
+    return x,y
+end
+
+function gmix_set_cen!(self::GMix, x::MFloat, y::MFloat)
+    x_cur, y_cur = gmix_get_cen(self)
+
+    x_shift = x-x_cur
+    y_shift = y-y_cur
+
+    for g in self
+        g.x += x_shift
+        g.y += y_shift
+    end
+
+    return x,y
+end
+
+# only makes sense for co-centric gaussians; would
+# need to account for different centers
+function gmix_get_T(self::GMix)
+    T::MFloat = 0
+    psum::MFloat = 0
+
+    for g in self
+        psum += g.p
+        T += g.p*(g.ixx + g.iyy)
+    end
+
+    T /= psum
+    return T
+end
+function gmix_get_psum(self::GMix)
+    psum::MFloat = 0
+
+    for g in self
+        psum += g.p
+    end
+    return psum
+end
+function gmix_set_psum!(self::GMix, psum::MFloat)
+    psum_cur = gmix_get_psum(self)
+    rat = psum/psum_cur
+
+    for g in self
+        g.p *= rat
+    end
+
+    return psum
+end
+
 
 getindex(self::GMixPars, ind::Int) = self.pars[ind]
 length(self::GMixPars) = length(self.pars)
@@ -200,8 +285,6 @@ function fill_simple!(self::GMix,
              (T_i/2.)*pars.shape.e2,     # ixy
              (T_i/2.)*(1-pars.shape.e1)) # iyy
 
-        println(i)
-        show(gauss)
     end
     return self
 

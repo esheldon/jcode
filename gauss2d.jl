@@ -1,6 +1,6 @@
 module gauss2d
 
-export Gauss2D, set!, get
+export Gauss2D, set!, gauss2d_eval
 
 import mfloat.MFloat
 
@@ -92,7 +92,7 @@ function set!(self::Gauss2D,
     return self
 end
 
-function get(self::Gauss2D, x::MFloat, y::MFloat; max_chi2::MFloat = 100.0)
+function gauss2d_eval(self::Gauss2D, x::MFloat, y::MFloat; max_chi2::MFloat = 100.0)
     u = y-self.y
     v = x-self.x
 
