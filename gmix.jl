@@ -2,12 +2,17 @@ module gmix
 
 # will extend length
 import Base.length, Base.fill!
+import Base.show
+
 import mfloat.MFloat
+using gauss2d
+using shape
 
 export GMix,
        length,
        GMixModel,
        gmix_simple_zeros,
+       gmix_new_model,
        GMIX_GAUSS,
        GMIX_FULL,
        GMIX_COELLIP,
@@ -16,8 +21,6 @@ export GMix,
        GMIX_DEV,
        GMIX_BD
 
-using gauss2d
-using shape
 
 typealias GMixModel Int
 
@@ -25,13 +28,13 @@ type GMix
     data::Vector{Gauss2D}
 
     GMix() = new(Array(Gauss2D,0))
+
     function GMix(num::Int) 
         tmp = Array(Gauss2D, num)
 
         if num > 0
-            val = Gauss2D()
             for i=1:num
-                tmp[i] = val
+                tmp[i] = Gauss2D()
             end
         end
 
@@ -39,23 +42,61 @@ type GMix
     end
 end
 
+# note GMIX_FULL not supported here
+type GMixPars
+    model::GMixModel
+
+    pars::Vector{MFloat}
+
+    shape::Shape
+
+    function GMixPars(model::GMixModel, parsin)
+        tpars = convert(Vector{MFloat}, parsin)
+
+        npars=length(tpars)
+        nexpected = GMIX_SIMPLE_NPARS[model]
+        if npars != nexpected
+            throw(error("""
+                        for model $model expected $nexpected pars but 
+                        got $pars.model
+                        """))
+        end
+
+        # the current convention is to alwasy have g1,g2 in the
+        # 3 4 slots
+        # note for GMIX_FULL this would not make sense, as they can
+        # have different shapes
+        tshape = Shape(tpars[3], tpars[4])
+
+        new(model, tpars, tshape)
+    end
+
+end
+
 getindex(self::GMix, ind::Int) = self.data[ind]
 length(self::GMix) = length(self.data)
+function show(self::GMix; stream=STDOUT)
+    for g in self.data
+        show(g, stream=stream)
+    end
+end
+
+getindex(self::GMixPars, ind::Int) = self.pars[ind]
+length(self::GMixPars) = length(self.pars)
+function show(self::GMixPars; stream=STDOUT)
+    println(stream,"model: $(self.model)")
+    print(stream,"pars:\n$(self.pars)")
+    println(stream,"shape: $(self.shape.g1) $(self.shape.g2)")
+end
+
 
 # all zeros
-function gmix_new_simple(model::GMixModel) 
+function gmix_simple_zeros(model::GMixModel) 
     ngauss=GMIX_SIMPLE_NGAUSS[model]
     return GMix(ngauss)
 end
 
 
-type GMixPars
-    model::GMixModel
-
-    data::Vector{MFloat}
-
-    shape::Shape
-end
 
 # from a parameters object
 # currently only for simple
@@ -63,15 +104,19 @@ function fill!(self::GMix, pars::GMixPars)
     if pars.model==GMIX_EXP
         fill_exp6!(self, pars)
     else
-        throw(error("Bad GMixModel $pars.model"))
+        throw(error("Bad GMixModel $(pars.model)"))
     end
+    return self
 end
 
 function gmix_new_model(pars::GMixPars)
-    self=gmix_new_simple(pars.model)
+    self=gmix_simple_zeros(pars.model)
 
     fill!(self, pars)
+
+    return self
 end
+
 
 # no enums in Julia yet
 const GMIX_GAUSS=1
@@ -127,8 +172,6 @@ function fill_exp6!(self::GMix, pars::GMixPars)
         throw(error("expected ngauss=$ngauss_expected got $(length(self))"))
     end
 
-    gmix_resize(self, ngauss_expected)
-
     fill_simple!(self, pars, fvals_exp6, pvals_exp6)
 end
 
@@ -138,25 +181,27 @@ function fill_simple!(self::GMix,
                       fvals::Vector{MFloat},
                       pvals::Vector{MFloat})
 
-    x      = pars.data[1]
-    y      = pars.data[2]
-    T      = pars.data[5]
-    counts = pars.data[6]
+    x      = pars[1]
+    y      = pars[2]
+    T      = pars[5]
+    counts = pars[6]
 
     for i=1:length(self)
         gauss=self[i]
 
-        T_i = T*Fvals[i]
+        T_i = T*fvals[i]
         counts_i=counts*pvals[i]
 
         set!(gauss,
              counts_i,
              x,
-             y
+             y,
              (T_i/2.)*(1+pars.shape.e1), # ixx
              (T_i/2.)*pars.shape.e2,     # ixy
              (T_i/2.)*(1-pars.shape.e1)) # iyy
 
+        println(i)
+        show(gauss)
     end
     return self
 

@@ -4,6 +4,11 @@ export Gauss2D, set!, get
 
 import mfloat.MFloat
 
+# this is so we can add a new method
+# note we don't have to export if a method on
+# these existing functions
+import Base.show, Base.string
+
 type Gauss2D
     p::MFloat
 
@@ -48,13 +53,21 @@ type Gauss2D
 
 end
 
+function string(s::Gauss2D)
+    "p: $(s.p) x: $(s.x) y: $(s.y) ixx: $(s.ixx) ixy: $(s.ixy) iyy: $(s.iyy)"
+end
+
+# stdout
+function show(s::Gauss2D; stream=STDOUT)
+    println(stream,string(s))
+end
 function set!(self::Gauss2D,
               p::MFloat,
-              y::MFloat,
               x::MFloat,
-              iyy::MFloat,
+              y::MFloat,
+              ixx::MFloat,
               ixy::MFloat,
-              ixx::MFloat)
+              iyy::MFloat)
 
     self.det = iyy*ixx - ixy*ixy;
 
@@ -63,15 +76,15 @@ function set!(self::Gauss2D,
     end
 
     self.p   = p
-    self.y = y
     self.x = x
-    self.iyy = iyy
-    self.ixy = ixy
+    self.y = y
     self.ixx = ixx
+    self.ixy = ixy
+    self.iyy = iyy
 
-    self.dyy = self.iyy/self.det
-    self.dxy = self.ixy/self.det
     self.dxx = self.ixx/self.det
+    self.dxy = self.ixy/self.det
+    self.dyy = self.iyy/self.det
     self.norm = 1./(2*pi*sqrt(self.det))
 
     self.pnorm = p*self.norm
