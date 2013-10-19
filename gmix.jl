@@ -18,6 +18,8 @@ export GMix,
        gmix_set_psum!,
        gmix_simple_zeros,
        gmix_new_model,
+       gmix_convolve,
+       gmix_convolve_fill!,
        GMIX_GAUSS,
        GMIX_FULL,
        GMIX_COELLIP,
@@ -165,6 +167,50 @@ function gmix_set_psum!(self::GMix, psum::MFloat)
     return psum
 end
 
+function gmix_convolve(obj::GMix, psf::GMix)
+    """
+    Convolve a gaussian mixture with a psf to get a new mixture
+    """
+    ntot = length(obj) + length(psf)
+    self = GMix(ntot)
+
+    gmix_convolve_fill!(self, obj, psf)
+
+    return self
+end
+function gmix_convolve_fill!(self::GMix, obj::GMix, psf::GMix)
+    ntot = length(obj) + length(psf)
+
+    sz=length(self)
+    if ntot != sz
+        throw(error("convolve expected $ntot gauss but have $sz"))
+    end
+
+    psf_xcen,psf_ycen = gmix_get_cen(psf)
+
+    psum::MFloat = 0
+    for g in psf
+        psum += g.p
+    end
+
+    iself=0
+    for og in obj
+        for pg in psf
+
+            ixx = og.ixx + pg.ixx
+            ixy = og.ixy + pg.ixy
+            iyy = og.iyy + pg.iyy
+
+            x = og.x + (pg.x-psf_xcen)
+            y = og.y + (pg.y-psf_ycen)
+
+            gauss2d_set(self[iself],
+                        og.p*pg.p/psum,
+                        x,y,ixx,ixy,iyy)
+            iself += 1
+        end
+    end
+end
 
 getindex(self::GMixPars, ind::Int) = self.pars[ind]
 length(self::GMixPars) = length(self.pars)
@@ -277,13 +323,13 @@ function fill_simple!(self::GMix,
         T_i = T*fvals[i]
         counts_i=counts*pvals[i]
 
-        set!(gauss,
-             counts_i,
-             x,
-             y,
-             (T_i/2.)*(1+pars.shape.e1), # ixx
-             (T_i/2.)*pars.shape.e2,     # ixy
-             (T_i/2.)*(1-pars.shape.e1)) # iyy
+        gauss2d_set!(gauss,
+                     counts_i,
+                     x,
+                     y,
+                     (T_i/2.)*(1+pars.shape.e1), # ixx
+                     (T_i/2.)*pars.shape.e2,     # ixy
+                     (T_i/2.)*(1-pars.shape.e1)) # iyy
 
     end
     return self
