@@ -1,6 +1,6 @@
 module gauss2d
 
-export Gauss2D, gauss2d_set!
+export Gauss2D, gauss2d_set!, get
 
 using mfloat
 
@@ -79,22 +79,7 @@ function gauss2d_set!(self::Gauss2D,
     return self
 end
 
-
-function evaluate(self::Gauss2D, x::MFloat, y::MFloat)
-    u = y-self.y
-    v = x-self.x
-
-    chi2 = self.dxx*u*u + self.dyy*v*v - 2.0*self.dxy*u*v
-
-    val = self.pnorm*exp( -0.5*chi2 )
-
-    return val
-end
-
-GAUSS2D_MAX_CHI2 = 25.0
-
-# only evaluate within a range
-function evaluate(self::Gauss2D, x::MFloat, y::MFloat, max_chi2::MFloat)
+function get(self::Gauss2D, x::MFloat, y::MFloat; max_chi2::MFloat = 100.0)
     u = y-self.y
     v = x-self.x
 
