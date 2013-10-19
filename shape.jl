@@ -1,38 +1,41 @@
 module shape
 
-export Shape, ShapeG, shape_set_g!, shape_set_e!, shape_set_eta!, shear
+using mfloat
 
-typealias ShapeFloat Float64
+export Shape, ShapeG, ShapeE, ShapeEta, shape_set_g!, shape_set_e!, shape_set_eta!, shear!
 
 type Shape
-    g1::ShapeFloat
-    g2::ShapeFloat
+    g1::MFloat
+    g2::MFloat
 
-    e1::ShapeFloat
-    e2::ShapeFloat
+    e1::MFloat
+    e2::MFloat
 
-    eta1::ShapeFloat
-    eta2::ShapeFloat
+    eta1::MFloat
+    eta2::MFloat
+
+    # all zeros constructor
+    Shape() = new(0.0,0.0,0.0,0.0,0.0,0.0)
+
+    function Shape(g1::MFloat, g2::MFloat) 
+        self=Shape()
+        shape_set_g!(self, g1, g2)
+        return self
+    end
+
 end
 
-# all zeros constructor
-Shape() = Shape(0.0,0.0,0.0,0.0,0.0,0.0)
 
-function Shape(g1::ShapeFloat, g2::ShapeFloat)
-    return ShapeG(g1, g2)
-end
 
-function ShapeG(g1::ShapeFloat, g2::ShapeFloat)
-    s=Shape()
-    shape_set_g!(s, g1, g2)
-    return s
+function ShapeG(g1::MFloat, g2::MFloat)
+    return Shape(g1,g2)
 end
-function ShapeE(e1::ShapeFloat, e2::ShapeFloat)
+function ShapeE(e1::MFloat, e2::MFloat)
     s=Shape()
     shape_set_e!(s, e1, e2)
     return s
 end
-function ShapeEta(eta1::ShapeFloat, eta2::ShapeFloat)
+function ShapeEta(eta1::MFloat, eta2::MFloat)
     s=Shape()
     shape_set_eta!(s, eta1, eta2)
     return s
@@ -44,15 +47,19 @@ end
 # shear comes second
 function (+)(self::Shape, sh::Shape)
 
-    sout = Shape()
+    sout = deepcopy(self)
+
+    shear!(sout, sh)
+
+    return sout
+end
+
+# shear comes second
+function shear!(self::Shape, sh::Shape)
 
     oneplusedot = 1.0 + self.e1*sh.e1 + self.e2*sh.e2
 
-    if sh.e1 == 0 && sh.e2 == 0
-        # adding nothing
-        sout = deepcopy(self)
-    elseif oneplusedot != 0
-        # result is not round
+    if (sh.e1 != 0 || sh.e2 != 0) && (oneplusedot != 0)
         esq = sh.e1^2 + sh.e2^2
 
         fac = (1.0 - sqrt(1.0-esq))/esq
@@ -63,16 +70,17 @@ function (+)(self::Shape, sh::Shape)
         e1 /= oneplusedot
         e2 /= oneplusedot
 
-        shape_set_e!(sout, e1, e2)
+        shape_set_e!(self, e1, e2)
     end
 
-    return sout
+    return self
 
 end
 
 
+
 # set the shape given g1,g2 keeping e and eta consistent
-function shape_set_g!(self::Shape, g1::ShapeFloat, g2::ShapeFloat)
+function shape_set_g!(self::Shape, g1::MFloat, g2::MFloat)
 
     self.g1=g1
     self.g2=g2
@@ -107,7 +115,7 @@ function shape_set_g!(self::Shape, g1::ShapeFloat, g2::ShapeFloat)
 end
 
 # set the shape given e1,e2 keeping g and eta consistent
-function shape_set_e!(self::Shape, e1::ShapeFloat, e2::ShapeFloat)
+function shape_set_e!(self::Shape, e1::MFloat, e2::MFloat)
 
     self.e1=e1
     self.e2=e2
@@ -143,7 +151,7 @@ function shape_set_e!(self::Shape, e1::ShapeFloat, e2::ShapeFloat)
 end
 
 # set the shape given eta1,eta2 keeping g and e consistent
-function shape_set_eta!(self::Shape, eta1::ShapeFloat, eta2::ShapeFloat)
+function shape_set_eta!(self::Shape, eta1::MFloat, eta2::MFloat)
 
     self.eta1=eta1
     self.eta2=eta2
