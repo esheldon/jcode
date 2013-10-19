@@ -1,8 +1,8 @@
 module gauss2d
 
-export Gauss2D, gauss2d_set!, get
+export Gauss2D, set!, get
 
-using mfloat
+import mfloat.MFloat
 
 type Gauss2D
     p::MFloat
@@ -41,20 +41,20 @@ type Gauss2D
                      iyy::MFloat)
         self=Gauss2D()
 
-        gauss2d_set!(self,p,y,x,iyy,ixy,ixx)
+        set!(self,p,y,x,iyy,ixy,ixx)
 
         return self
     end
 
 end
 
-function gauss2d_set!(self::Gauss2D,
-                      p::MFloat,
-                      y::MFloat,
-                      x::MFloat,
-                      iyy::MFloat,
-                      ixy::MFloat,
-                      ixx::MFloat)
+function set!(self::Gauss2D,
+              p::MFloat,
+              y::MFloat,
+              x::MFloat,
+              iyy::MFloat,
+              ixy::MFloat,
+              ixx::MFloat)
 
     self.det = iyy*ixx - ixy*ixy;
 
