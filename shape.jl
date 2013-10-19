@@ -2,7 +2,7 @@ module shape
 
 using mfloat
 
-export Shape, ShapeG, ShapeE, ShapeEta, shape_set_g!, shape_set_e!, shape_set_eta!, shear!
+export Shape, ShapeG, ShapeE, ShapeEta, set_g!, set_e!, set_eta!, shear!
 
 type Shape
     g1::MFloat
@@ -19,7 +19,7 @@ type Shape
 
     function Shape(g1::MFloat, g2::MFloat) 
         self=Shape()
-        shape_set_g!(self, g1, g2)
+        set_g!(self, g1, g2)
         return self
     end
 
@@ -32,12 +32,12 @@ function ShapeG(g1::MFloat, g2::MFloat)
 end
 function ShapeE(e1::MFloat, e2::MFloat)
     s=Shape()
-    shape_set_e!(s, e1, e2)
+    set_e!(s, e1, e2)
     return s
 end
 function ShapeEta(eta1::MFloat, eta2::MFloat)
     s=Shape()
-    shape_set_eta!(s, eta1, eta2)
+    set_eta!(s, eta1, eta2)
     return s
 end
 
@@ -70,7 +70,7 @@ function shear!(self::Shape, sh::Shape)
         e1 /= oneplusedot
         e2 /= oneplusedot
 
-        shape_set_e!(self, e1, e2)
+        set_e!(self, e1, e2)
     end
 
     return self
@@ -80,7 +80,7 @@ end
 
 
 # set the shape given g1,g2 keeping e and eta consistent
-function shape_set_g!(self::Shape, g1::MFloat, g2::MFloat)
+function set_g!(self::Shape, g1::MFloat, g2::MFloat)
 
     self.g1=g1
     self.g2=g2
@@ -115,7 +115,7 @@ function shape_set_g!(self::Shape, g1::MFloat, g2::MFloat)
 end
 
 # set the shape given e1,e2 keeping g and eta consistent
-function shape_set_e!(self::Shape, e1::MFloat, e2::MFloat)
+function set_e!(self::Shape, e1::MFloat, e2::MFloat)
 
     self.e1=e1
     self.e2=e2
@@ -151,7 +151,7 @@ function shape_set_e!(self::Shape, e1::MFloat, e2::MFloat)
 end
 
 # set the shape given eta1,eta2 keeping g and e consistent
-function shape_set_eta!(self::Shape, eta1::MFloat, eta2::MFloat)
+function set_eta!(self::Shape, eta1::MFloat, eta2::MFloat)
 
     self.eta1=eta1
     self.eta2=eta2

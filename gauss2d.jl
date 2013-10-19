@@ -80,7 +80,7 @@ function gauss2d_set!(self::Gauss2D,
 end
 
 
-function gauss2d_lnprob(self::Gauss2D, x::MFloat, y::MFloat)
+function evaluate(self::Gauss2D, x::MFloat, y::MFloat)
     u = y-self.y
     v = x-self.x
 
@@ -91,16 +91,17 @@ function gauss2d_lnprob(self::Gauss2D, x::MFloat, y::MFloat)
     return val
 end
 
+GAUSS2D_MAX_CHI2 = 25.0
+
 # only evaluate within a range
-GAUSS2_EXP_MAX_CHI2 = 25.0
-function gauss2d_lnprob_lim(self::Gauss2D, x::MFloat, y::MFloat)
+function evaluate(self::Gauss2D, x::MFloat, y::MFloat, max_chi2::MFloat)
     u = y-self.y
     v = x-self.x
 
     chi2 = self.dxx*u*u + self.dyy*v*v - 2.0*self.dxy*u*v
 
     val=0.0
-    if chi2 < GAUSS2_EXP_MAX_CHI2
+    if chi2 < max_chi2
         val = self.pnorm*exp( -0.5*chi2 )
     end
 
