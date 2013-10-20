@@ -26,6 +26,17 @@ export GMix,
        GMIX_DEV,
        GMIX_BD
 
+# no enums in Julia yet
+const GMIX_GAUSS=1
+const GMIX_FULL=2
+const GMIX_COELLIP=3
+const GMIX_TURB=4
+const GMIX_EXP=5
+const GMIX_DEV=6
+const GMIX_BD=7
+
+const MAX_CHI2 = 25.0
+
 #
 # Gauss2D
 #
@@ -113,14 +124,14 @@ function set!(self::Gauss2D,
     return self
 end
 
-function eval(self::Gauss2D, x::MFloat, y::MFloat; max_chi2::MFloat = 100.0)
+function get(self::Gauss2D, x::MFloat, y::MFloat)
     u = y-self.y
     v = x-self.x
 
     chi2 = self.dxx*u*u + self.dyy*v*v - 2.0*self.dxy*u*v
 
     val=0.0
-    if chi2 < max_chi2
+    if chi2 < MAX_CHI2
         val = self.pnorm*exp( -0.5*chi2 )
     end
 
@@ -256,15 +267,33 @@ function show(self::GMix; stream=STDOUT)
     end
 end
 
-function eval(self::GMix, x::MFloat, y::MFloat; max_chi2::MFloat = 100.0)
+function get(self::GMix, x::MFloat, y::MFloat)
+    """
+    fully inlined the Gauss2D evaluation, enourmously faster
+    
+    The compiler does not wish to inline; in the future there may be a inline
+    annotation for functions
+
+    """
     val::MFloat = 0.0
 
     for g in self
-        val += eval(g, x, y, max_chi2=max_chi2)
+
+        u = y-g.y
+        v = x-g.x
+
+        chi2 = g.dxx*u*u + g.dyy*v*v - 2.0*g.dxy*u*v
+
+        val=0.0
+        if chi2 < MAX_CHI2
+            val = g.pnorm*exp( -0.5*chi2 )
+        end
+
     end
 
     return val
 end
+
 
 function get_cen(self::GMix)
     x::MFloat = 0
@@ -377,14 +406,6 @@ end
 
 
 
-# no enums in Julia yet
-const GMIX_GAUSS=1
-const GMIX_FULL=2
-const GMIX_COELLIP=3
-const GMIX_TURB=4
-const GMIX_EXP=5
-const GMIX_DEV=6
-const GMIX_BD=7
 
 const GMIX_SIMPLE_NPARS = {GMIX_GAUSS=>6,
                            GMIX_EXP=>6,
@@ -486,7 +507,7 @@ end
 #
 
 function render(self::GMix, dims::(Int,Int);
-                nsub=1, max_chi2::MFloat = 100.0)
+                nsub::Int=1, max_chi2::MFloat = 100.0)
     """
     Get a new image with a rendering of the mixture
     """
@@ -495,8 +516,7 @@ function render(self::GMix, dims::(Int,Int);
     return im
 end
 
-function render!(self::GMix, image::Array{MFloat,2}; 
-                 nsub=1, max_chi2::MFloat = 100.0)
+function render!(self::GMix, image::Array{MFloat,2}; nsub::Int=1)
     """
     The mixture is *added* to the input image
     """
@@ -509,6 +529,8 @@ function render!(self::GMix, image::Array{MFloat,2};
     stepsize = 1./nsub
     offset = (nsub-1)*stepsize/2.
 
+    ngauss=length(self)
+
     nx,ny = size(image)
     for x=1:nx
         for y=1:ny
@@ -519,7 +541,8 @@ function render!(self::GMix, image::Array{MFloat,2};
                 ty = y-offset
                 for iysub=1:nsub
 
-                    tval += eval(self, tx, ty, max_chi2=max_chi2)
+                    # this is 5% slower than full inline
+                    tval += get(self, tx, ty)
 
                     ty += stepsize
                 end
