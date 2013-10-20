@@ -1,15 +1,15 @@
 module gmix
 
 # will add methods to these
-import Base.length, Base.fill!
+import Base.length, Base.fill!, Base.string
 import Base.show, Base.start, Base.next, Base.done
 
 import mfloat.MFloat
-using gauss2d
 using shape
 
 export GMix,
        GMixModel,
+       Gauss2D,
        GMIX_GAUSS,
        GMIX_FULL,
        GMIX_COELLIP,
@@ -19,7 +19,9 @@ export GMix,
        GMIX_BD
 
 
-typealias GMixModel Int
+#
+# GMix gaussian mixture
+#
 
 type GMix
     data::Vector{Gauss2D}
@@ -37,37 +39,48 @@ type GMix
 
         new(tmp)
     end
+
 end
 
-# note GMIX_FULL not supported here
-type GMixPars
-    model::GMixModel
+function simple_zeros(model::GMixModel) 
+    """
+    all zeros
+    """
+    ngauss=GMIX_SIMPLE_NGAUSS[model]
+    return GMix(ngauss)
+end
+function new_model(pars::GMixPars)
+    """
+    The GMixPars fully describe the mixture
+    """
+    self=simple_zeros(pars.model)
 
-    pars::Vector{MFloat}
+    fill!(self, pars)
 
-    shape::Shape
+    return self
+end
+function new_model(model::GMixModel, pars)
+    """
+    the model and pars describe a GMixPars and in turn a GMix
+    """
+    gp = GMixPars(model, pars)
+    return new_model(gp)
+end
 
-    function GMixPars(model::GMixModel, parsin)
-        tpars = convert(Vector{MFloat}, parsin)
 
-        npars=length(tpars)
-        nexpected = GMIX_SIMPLE_NPARS[model]
-        if npars != nexpected
-            throw(error("""
-                        for model $model expected $nexpected pars but 
-                        got $pars.model
-                        """))
-        end
 
-        # the current convention is to always have g1,g2 in the
-        # 3 4 slots
-        # note for GMIX_FULL this would not make sense, as they can
-        # have different shapes
-        tshape = Shape(tpars[3], tpars[4])
 
-        new(model, tpars, tshape)
+# from a parameters object
+# currently only for simple
+function fill!(self::GMix, pars::GMixPars)
+    if pars.model==GMIX_EXP
+        fill_exp6!(self, pars)
+    elseif pars.model==GMIX_GAUSS
+        fill_gauss!(self, pars)
+    else
+        throw(error("Bad GMixModel $(pars.model)"))
     end
-
+    return self
 end
 
 # indexing and iteration
@@ -202,48 +215,6 @@ function convolve_fill!(self::GMix, obj::GMix, psf::GMix)
     end
 end
 
-getindex(self::GMixPars, ind::Int) = self.pars[ind]
-length(self::GMixPars) = length(self.pars)
-function show(self::GMixPars; stream=STDOUT)
-    println(stream,"model: $(self.model)")
-    print(stream,"pars:\n$(self.pars)")
-    println(stream,"shape: $(self.shape.g1) $(self.shape.g2)")
-end
-
-
-# all zeros
-function simple_zeros(model::GMixModel) 
-    ngauss=GMIX_SIMPLE_NGAUSS[model]
-    return GMix(ngauss)
-end
-
-
-
-# from a parameters object
-# currently only for simple
-function fill!(self::GMix, pars::GMixPars)
-    if pars.model==GMIX_EXP
-        fill_exp6!(self, pars)
-    elseif pars.model==GMIX_GAUSS
-        fill_gauss!(self, pars)
-    else
-        throw(error("Bad GMixModel $(pars.model)"))
-    end
-    return self
-end
-
-function new_model(pars::GMixPars)
-    self=simple_zeros(pars.model)
-
-    fill!(self, pars)
-
-    return self
-end
-function new_model(model::GMixModel, pars)
-    gp = GMixPars(model, pars)
-    return new_model(gp)
-end
-
 
 
 # no enums in Julia yet
@@ -350,6 +321,10 @@ function fill_simple!(self::GMix,
 end
 
 
+#
+# rendering the mixture into an image
+#
+
 function render(self::GMix, dims::(Int,Int);
                 nsub=1, max_chi2::MFloat = 100.0)
     """
@@ -359,6 +334,7 @@ function render(self::GMix, dims::(Int,Int);
     render!(self, im, nsub=nsub, max_chi2=max_chi2)
     return im
 end
+
 function render!(self::GMix, image::Array{MFloat,2}; 
                  nsub=1, max_chi2::MFloat = 100.0)
     """
@@ -397,6 +373,158 @@ function render!(self::GMix, image::Array{MFloat,2};
         end
     end
 end
+
+
+#
+# Gauss2D
+#
+
+type Gauss2D
+    p::MFloat
+
+    x::MFloat
+    y::MFloat
+
+    ixx::MFloat
+    ixy::MFloat
+    iyy::MFloat
+
+    # derived quantities
+    det::MFloat
+
+    dxx::MFloat
+    dxy::MFloat
+    dyy::MFloat # iyy/det
+
+    norm::MFloat # 1/( 2*pi*sqrt(det) )
+
+    pnorm::MFloat # p*norm
+
+    Gauss2D() = new(0.0,
+                    0.0,0.0,
+                    0.0,0.0,0.0,
+                    0.0,
+                    0.0,0.0,0.0,
+                    0.0,
+                    0.0)
+
+    function Gauss2D(p::MFloat,
+                     x::MFloat,
+                     y::MFloat,
+                     ixx::MFloat,
+                     ixy::MFloat,
+                     iyy::MFloat)
+        self=Gauss2D()
+
+        set!(self,p,y,x,iyy,ixy,ixx)
+
+        return self
+    end
+
+end
+
+function string(s::Gauss2D)
+    "p: $(s.p) x: $(s.x) y: $(s.y) ixx: $(s.ixx) ixy: $(s.ixy) iyy: $(s.iyy)"
+end
+
+# stdout
+function show(s::Gauss2D; stream=STDOUT)
+    println(stream,string(s))
+end
+function set!(self::Gauss2D,
+              p::MFloat,
+              x::MFloat,
+              y::MFloat,
+              ixx::MFloat,
+              ixy::MFloat,
+              iyy::MFloat)
+
+    self.det = iyy*ixx - ixy*ixy;
+
+    if self.det <= 0
+        throw(DomainError()) 
+    end
+
+    self.p   = p
+    self.x = x
+    self.y = y
+    self.ixx = ixx
+    self.ixy = ixy
+    self.iyy = iyy
+
+    self.dxx = self.ixx/self.det
+    self.dxy = self.ixy/self.det
+    self.dyy = self.iyy/self.det
+    self.norm = 1./(2*pi*sqrt(self.det))
+
+    self.pnorm = p*self.norm
+
+    return self
+end
+
+function eval(self::Gauss2D, x::MFloat, y::MFloat; max_chi2::MFloat = 100.0)
+    u = y-self.y
+    v = x-self.x
+
+    chi2 = self.dxx*u*u + self.dyy*v*v - 2.0*self.dxy*u*v
+
+    val=0.0
+    if chi2 < max_chi2
+        val = self.pnorm*exp( -0.5*chi2 )
+    end
+
+    return val
+end
+
+
+
+#
+# GMixPars represent parameters that can be used to construct
+# a GMix object
+#
+
+typealias GMixModel Int
+
+# note GMIX_FULL not supported here
+type GMixPars
+    model::GMixModel
+
+    pars::Vector{MFloat}
+
+    shape::Shape
+
+    function GMixPars(model::GMixModel, parsin)
+        tpars = convert(Vector{MFloat}, parsin)
+
+        npars=length(tpars)
+        nexpected = GMIX_SIMPLE_NPARS[model]
+        if npars != nexpected
+            throw(error("""
+                        for model $model expected $nexpected pars but 
+                        got $pars.model
+                        """))
+        end
+
+        # the current convention is to always have g1,g2 in the
+        # 3 4 slots
+        # note for GMIX_FULL this would not make sense, as they can
+        # have different shapes
+        tshape = Shape(tpars[3], tpars[4])
+
+        new(model, tpars, tshape)
+    end
+
+end
+
+getindex(self::GMixPars, ind::Int) = self.pars[ind]
+length(self::GMixPars) = length(self.pars)
+function show(self::GMixPars; stream=STDOUT)
+    println(stream,"model: $(self.model)")
+    print(stream,"pars:\n$(self.pars)")
+    println(stream,"shape: $(self.shape.g1) $(self.shape.g2)")
+end
+
+
 
 
 end # module
