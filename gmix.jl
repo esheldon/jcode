@@ -289,9 +289,6 @@ const pvals_exp6 = MFloat[0.00061601229677880041,
                           0.45496740582554868, 
                           0.26521634184240478]
 
-const fvals_gauss = MFloat[1.0]
-const pvals_gauss = MFloat[1.0]
-
 function fill_exp6!(self::GMix, pars::GMixPars)
     const ngauss_expected=6
 
@@ -304,6 +301,10 @@ function fill_exp6!(self::GMix, pars::GMixPars)
 
     fill_simple!(self, pars, fvals_exp6, pvals_exp6)
 end
+
+const fvals_gauss = MFloat[1.0]
+const pvals_gauss = MFloat[1.0]
+
 function fill_gauss!(self::GMix, pars::GMixPars)
     const ngauss_expected=1
 
@@ -349,7 +350,53 @@ function fill_simple!(self::GMix,
 end
 
 
+function render(self::GMix, dims::(Int,Int);
+                nsub=1, max_chi2::MFloat = 100.0)
+    """
+    Get a new image with a rendering of the mixture
+    """
+    im=zeros(MFloat,dims)
+    render!(self, im, nsub=nsub, max_chi2=max_chi2)
+    return im
+end
+function render!(self::GMix, image::Array{MFloat,2}; 
+                 nsub=1, max_chi2::MFloat = 100.0)
+    """
+    The mixture is *added* to the input image
+    """
 
+    if nsub < 1
+        nsub=1
+    end
+
+    onebynsub2 = 1./(nsub*nsub)
+    stepsize = 1./nsub
+    offset = (nsub-1)*stepsize/2.
+
+    nx,ny = size(image)
+    for x=1:nx
+        for y=1:ny
+
+            tval=0.0
+            tx = x-offset
+            for ixsub=1:nsub
+                ty = y-offset
+                for iysub=1:nsub
+
+                    tval += eval(self, tx, ty, max_chi2=max_chi2)
+
+                    ty += stepsize
+                end
+                tx += stepsize
+            end
+
+            tval *= onebynsub2
+
+            image[x,y] += tval
+
+        end
+    end
+end
 
 
 end # module
