@@ -125,8 +125,8 @@ function set!(self::Gauss2D,
 end
 
 function get(self::Gauss2D, x::MFloat, y::MFloat)
-    u = y-self.y
     v = x-self.x
+    u = y-self.y
 
     chi2 = self.dxx*u*u + self.dyy*v*v - 2.0*self.dxy*u*v
 
@@ -279,14 +279,13 @@ function get(self::GMix, x::MFloat, y::MFloat)
 
     for g in self
 
-        u = y-g.y
         v = x-g.x
+        u = y-g.y
 
         chi2 = g.dxx*u*u + g.dyy*v*v - 2.0*g.dxy*u*v
 
-        val=0.0
         if chi2 < MAX_CHI2
-            val = g.pnorm*exp( -0.5*chi2 )
+            val += g.pnorm*exp( -0.5*chi2 )
         end
 
     end
@@ -507,12 +506,12 @@ end
 #
 
 function render(self::GMix, dims::(Int,Int);
-                nsub::Int=1, max_chi2::MFloat = 100.0)
+                nsub::Int=1)
     """
     Get a new image with a rendering of the mixture
     """
     im=zeros(MFloat,dims)
-    render!(self, im, nsub=nsub, max_chi2=max_chi2)
+    render!(self, im, nsub=nsub)
     return im
 end
 
@@ -528,8 +527,6 @@ function render!(self::GMix, image::Array{MFloat,2}; nsub::Int=1)
     onebynsub2 = 1./(nsub*nsub)
     stepsize = 1./nsub
     offset = (nsub-1)*stepsize/2.
-
-    ngauss=length(self)
 
     nx,ny = size(image)
     for x=1:nx
@@ -558,5 +555,33 @@ function render!(self::GMix, image::Array{MFloat,2}; nsub::Int=1)
 end
 
 
+function get_loglike(self::GMix,
+                     image::Array{MFloat,2},
+                     ivar::MFloat)
+
+                 
+    loglike::MFloat = 0.0
+    s2n_numer::MFloat = 0.0
+    s2n_denom::MFloat = 0.0
+
+    nx,ny = size(image)
+
+    for ix=1:nx
+        x = convert(MFloat, ix)
+        for iy=1:ny
+            y = convert(MFloat, iy)
+            model_val = get(self, x, y)
+            pixval = image[ix,iy]
+
+            diff = model_val-pixval
+            loglike += diff*diff*ivar
+            s2n_numer += pixval*model_val*ivar
+            s2n_denom += model_val*model_val*ivar
+        end
+    end
+
+    loglike *= (-0.5)
+    return loglike, s2n_numer, s2n_denom
+end
 
 end # module
