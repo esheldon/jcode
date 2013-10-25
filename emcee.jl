@@ -1,3 +1,13 @@
+"""
+TODO 
+    - add reset?
+    - add parallel?
+        - can split the loops in propose_stretch,
+        fill out q first, then do pmap to calculate
+        the newlnprob, then another loop to do lndiff
+        and accept
+     
+"""
 module emcee
 
 export Sampler, sample!, flatchain, getstats
@@ -45,7 +55,29 @@ function sample!(self::Sampler,
                  pstart::Array{Float64,2}, # (ndim,nwalkers)
                  niter::Int;
                  lnprob=None)
+    """
+    sample the posterior
 
+    parameters
+    ----------
+    self::Sampler
+        The sampler. The internal chain, lnprop,niter,naccepted
+        values are modified.
+    pstart::Array{Float64,2}
+        The starting position, shape (ndim, nwalkers)
+    niter::Int
+        Number of iterations to perform
+    lnprob: optional 
+        The lnprob values for the input pstart, if not
+        sent will be calculated
+
+    output
+    ------
+    p, lnprob
+        The last positions and lnprob values from the
+        chain.  Can be sent to this function to continue
+        the chain.
+    """
     p = deepcopy(pstart) # current set of parameters
     check_inputs(self, p)
     halfk=fld(self.nwalkers,2)
@@ -80,7 +112,65 @@ function sample!(self::Sampler,
     return p, lnprob
 end
 
+
+function propose_stretch(self::Sampler,
+                         p1::Array{Float64,2},
+                         p2::Array{Float64,2},
+                         lnp1::Vector{Float64})
+    """
+    The Goodman and Weare proposal function
+    """
+    nw1 = size(p1,2) # number of walkers
+    nw2 = size(p2,2)
+
+    q=zeros( (self.ndim, nw1) )
+    newlnprob = zeros(nw1)
+    accept = zeros(Bool, nw1)
+
+    for i1=1:nw1
+        z = ((self.a - 1.) * rand() + 1)^2 / self.a
+        i2 = rand(1:nw2)
+
+        q[:,i1] = p2[:,i2] - z * (p2[:,i2] - p1[:,i1])
+        newlnprob[i1] = self.lnprobfn(q[:,i1], self.args...)
+
+        lnpdiff = (self.ndim - 1.) * log(z) + newlnprob[i1] - lnp1[i1]
+        accept[i1] = lnpdiff > log(rand())
+    end
+
+    return q, newlnprob, accept
+
+end
+
+
+function get_lnprob_walkers(self::Sampler,
+                            pars::Array{Float64,2})
+    """
+    Get lnprob for each walker in the pars array
+    """
+    nwalkers=size(pars,2)
+    lnprob = zeros(nwalkers)
+    for i=1:nwalkers
+        tpars = pars[:, i] # makes a copy
+        lnprob[i] = self.lnprobfn(tpars, self.args...)
+    end
+
+    return lnprob
+end
+
 function flatchain(self::Sampler)
+    """
+    Flatten the chain
+
+    parameters
+    ----------
+    sampler:
+        The sampler
+
+    output
+    ------
+    The flattened chain of shape (ndim, niter*nwalkers)
+    """
     dims=size(self.chain)
     flatdims = (dims[1], dims[2]*dims[3])
     return reshape(self.chain, flatdims)
@@ -126,51 +216,7 @@ function getstats(fchain::Array{Float64,2})
 
     return meanpars, cov
 end
-function propose_stretch(self::Sampler,
-                         p1::Array{Float64,2},
-                         p2::Array{Float64,2},
-                         lnp1::Vector{Float64})
-    
-    nw1 = size(p1,2) # number of walkers
-    nw2 = size(p2,2)
 
-    q=zeros( (self.ndim, nw1) )
-    newlnprob = zeros(nw1)
-    accept = zeros(Bool, nw1)
-
-    for i1=1:nw1
-        z = ((self.a - 1.) * rand() + 1)^2 / self.a
-        i2 = rand(1:nw2)
-
-        q[:,i1] = p2[:,i2] - z * (p2[:,i2] - p1[:,i1])
-        newlnprob[i1] = self.lnprobfn(q[:,i1], self.args...)
-
-        lnpdiff = (self.ndim - 1.) * log(z) + newlnprob[i1] - lnp1[i1]
-        accept[i1] = lnpdiff > log(rand())
-    end
-
-    return q, newlnprob, accept
-
-end
-
-
-function get_lnprob_walkers(self::Sampler,
-                            pars::Array{Float64,2})
-    """
-
-    Get lnprob for each walker in the pars in array (npars, nwalkers) shape.
-    Can make this parallel in the future
-
-    """
-    nwalkers=size(pars,2)
-    lnprob = zeros(nwalkers)
-    for i=1:nwalkers
-        tpars = pars[:, i] # makes a copy
-        lnprob[i] = self.lnprobfn(tpars, self.args...)
-    end
-
-    return lnprob
-end
 
 function check_inputs(self::Sampler, p0::Array{Float64})
     sz=size(p0)
@@ -196,6 +242,11 @@ function check_inputs(self::Sampler, p0::Array{Float64})
     end
 
 end
+
+
+#
+# Some tests
+#
 
 function line_lnprob_func(pars::Vector{Float64},
                           x::Vector{Float64},
@@ -236,6 +287,8 @@ function test_line(; ntrial=1)
 
     y0 = offset + slope*x
 
+    pstart=zeros( (ndim, nwalkers) )
+
     println("true offset: $offset")
     println("true slope:  $slope")
     o_offset=0.0
@@ -249,12 +302,11 @@ function test_line(; ntrial=1)
 
         sampler=Sampler(nwalkers, ndim, line_lnprob_func, args)
 
-        pstart=zeros( (ndim, nwalkers) )
+        # adding offset to guesses
         pstart[1,:] = 0.2 + offset + 0.1*randn(nwalkers)
         pstart[2,:] = 0.1 + slope + 0.1*randn(nwalkers)
 
         p,lnp=sample!(sampler, pstart, burnin)
-
         p,lnp=sample!(sampler, p, nsteps, lnprob=lnp)
 
         fchain=flatchain(sampler)
