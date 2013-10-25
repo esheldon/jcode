@@ -7,17 +7,19 @@ type Sampler
     ndim::Int            # number of dimensions
     niter::Int           # number of iterations
     lnprobfn::Function   # function to get ln(prob)
-    a::Float64           # affine stretch parameter
-    args                 # extra arguments
+    args::(Any...)       # extra arguments
+
+    a::Float64           # affine stretch parameter optional
+
     chain                # holds the chain data
     lnprob               # holds lnprob at each step
     naccepted            # number accepted at each step
 
     function Sampler(nwalkers::Int,
                      ndim::Int,
-                     lnprobfn::Function;
-                     a::Float64=2.0,
-                     args=None)
+                     lnprobfn::Function,
+                     args::(Any...);
+                     a::Float64=2.0)
         if (nwalkers % 2) != 0
             throw(error("number of walkers must be even, got $nwalkers"))
         end
@@ -34,7 +36,7 @@ type Sampler
         noiter=0
         nolnprob=None
         noaccepted=None
-        new(nwalkers, ndim, noiter, lnprobfn, a, args,
+        new(nwalkers, ndim, noiter, lnprobfn, args, a,
             nochain, nolnprob, noaccepted)
     end
 end
@@ -141,7 +143,7 @@ function propose_stretch(self::Sampler,
         i2 = rand(1:nw2)
 
         q[:,i1] = p2[:,i2] - z * (p2[:,i2] - p1[:,i1])
-        newlnprob[i1] = self.lnprobfn(q[:,i1])
+        newlnprob[i1] = self.lnprobfn(q[:,i1], self.args...)
 
         lnpdiff = (self.ndim - 1.) * log(z) + newlnprob[i1] - lnp1[i1]
         accept[i1] = lnpdiff > log(rand())
@@ -150,34 +152,7 @@ function propose_stretch(self::Sampler,
     return q, newlnprob, accept
 
 end
-function propose_stretch_old(self::Sampler,
-                         p1::Array{Float64,2},
-                         p2::Array{Float64,2},
-                         lnp1::Vector{Float64})
-    
-    nw1 = size(p1,2) # number of walkers
-    nw2 = size(p2,2)
 
-    # Generate the vectors of random numbers that will produce the
-    # proposal.
-    z = ((self.a - 1.) * rand(nw1) + 1) .^2 / self.a
-    zz = reshape(z, (1,nw1))
-
-    rint = Array(Int, nw1)
-    rand!(1:nw2, rint)
-
-    # Calculate the proposed positions and the log-probability there.
-    p2r = p2[:,rint]
-    q = p2r .- zz .* (p2r .- p1)
-    newlnprob = get_lnprob_walkers(self, q)
-
-    # Decide whether or not the proposals should be accepted.
-    lnpdiff = (self.ndim - 1.) * log(z) .+ newlnprob .- lnp1
-    accept = lnpdiff > log(rand(length(lnpdiff)))
-
-    return q, newlnprob, accept
-
-end
 
 function get_lnprob_walkers(self::Sampler,
                             pars::Array{Float64,2})
@@ -191,7 +166,7 @@ function get_lnprob_walkers(self::Sampler,
     lnprob = zeros(nwalkers)
     for i=1:nwalkers
         tpars = pars[:, i] # makes a copy
-        lnprob[i] = self.lnprobfn(tpars)
+        lnprob[i] = self.lnprobfn(tpars, self.args...)
     end
 
     return lnprob
@@ -222,65 +197,95 @@ function check_inputs(self::Sampler, p0::Array{Float64})
 
 end
 
-function test_line()
+function line_lnprob_func(pars::Vector{Float64},
+                          x::Vector{Float64},
+                          y::Vector{Float64},
+                          ivar::Float64)
+    lnprob::Float64 = 0.0
+    tmp::Float64 = 0.0
+    off = pars[1]
+    slp = pars[2]
 
-    nwalkers=100
+    npoints = length(x)
+    for i=1:npoints
+        tmp = off + slp*x[i] - y[i]
+        tmp *= tmp
+        lnprob += tmp
+    end
+
+    lnprob *= (-0.5*ivar)
+
+    return lnprob
+end
+
+
+function test_line(; ntrial=1)
+
+    nwalkers=20
     burnin=400
-    nsteps=200
+    nsteps=100
     ndim=2
 
     offset=1.0
     slope=2.0
-    yerr=0.01
+    yerr=0.3
     ivar = 1./(yerr*yerr)
-    npoints=20
+    npoints=25*25
 
     x = linspace(0.0, 5.0, npoints)
 
-    # closures
-    line_func = (pars)->pars[1] + pars[2] * x
-    lnprob_func = (pars)-> sum( ivar*(line_func(pars) .- y ).^2 )
-
-    y = line_func([offset,slope])
-    y += yerr*randn(npoints)
-
-    sampler=Sampler(nwalkers, ndim, lnprob_func)
-
-    pstart=zeros( (ndim, nwalkers) )
-    pstart[1,:] = offset + 0.1*randn(nwalkers)
-    pstart[2,:] = slope + 0.1*randn(nwalkers)
-
-    println("pstart")
-    print(max(pstart))
-    println()
-    #for i=1:nwalkers
-    #    println(pstart[1,i]," ",pstart[2,i])
-    #end
-
-    p,lnp=sample!(sampler, pstart, burnin)
-    println("after burnin")
-    for i=1:nwalkers
-        println(p[1,i]," ",p[2,i]," ",lnp[i])
-    end
-    #sample!(sampler, p, nsteps, lnprob=lnp)
-    p,lnp=sample!(sampler, p, nsteps)
-
-    println("after steps")
-    for i=1:nwalkers
-        println(p[1,i]," ",p[2,i]," ",lnp[i])
-    end
-    fchain=flatchain(sampler)
-    means,cov = getstats(fchain)
-
-    offset_meas=means[1]
-    offset_err=sqrt(cov[1,1])
-    slope_meas=means[2]
-    slope_err=sqrt(cov[2,2])
+    y0 = offset + slope*x
 
     println("true offset: $offset")
     println("true slope:  $slope")
-    println("offset: $offset_meas +/- $offset_err")
-    println("slope:  $slope_meas +/- $slope_err")
+    o_offset=0.0
+    o_slope=0.0
+    o_offset_ivarsum = 0.0
+    o_slope_ivarsum = 0.0
+    for i=1:ntrial
+
+        y = y0 + yerr*randn(npoints)
+        args=(x,y,ivar)
+
+        sampler=Sampler(nwalkers, ndim, line_lnprob_func, args)
+
+        pstart=zeros( (ndim, nwalkers) )
+        pstart[1,:] = 0.2 + offset + 0.1*randn(nwalkers)
+        pstart[2,:] = 0.1 + slope + 0.1*randn(nwalkers)
+
+        p,lnp=sample!(sampler, pstart, burnin)
+
+        p,lnp=sample!(sampler, p, nsteps, lnprob=lnp)
+
+        fchain=flatchain(sampler)
+        means,cov = getstats(fchain)
+
+        offset_meas=means[1]
+        offset_err=sqrt(cov[1,1])
+        slope_meas=means[2]
+        slope_err=sqrt(cov[2,2])
+
+        println("offset: $offset_meas +/- $offset_err")
+        println("slope:  $slope_meas +/- $slope_err")
+
+        if ntrial > 1
+            o_offset += offset_meas
+            o_offset_ivarsum += (1.0/offset_err)^2
+            o_slope += slope_meas
+            o_slope_ivarsum += (1.0/slope_err)^2
+        end
+    end
+
+    if ntrial > 1
+        o_offset /= ntrial
+        o_slope /= ntrial
+
+        o_offset_err = sqrt(1.0/o_offset_ivarsum)
+        o_slope_err = sqrt(1.0/o_slope_ivarsum)
+
+        println("overall offset: $o_offset +/- $o_offset_err")
+        println("overall slope:  $o_slope +/- $o_slope_err")
+    end
 end
 
 end
