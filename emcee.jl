@@ -2,11 +2,6 @@
 TODO 
     - add reset?
     - add parallel?
-        - can split the loops in propose_stretch,
-        fill out q first, then do pmap to calculate
-        the newlnprob, then another loop to do lndiff
-        and accept
-     
 """
 module emcee
 
@@ -56,7 +51,7 @@ function sample!(self::Sampler,
                  niter::Int;
                  lnprob=None)
     """
-    sample the posterior
+    sample the posterior.  Internal chain is overwritten
 
     parameters
     ----------
@@ -98,10 +93,16 @@ function sample!(self::Sampler,
         for (S1, S2) in [(first, second), (second, first)]
             q, newlnp, acc = propose_stretch(self,p[:,S1],p[:,S2],lnprob[S1])
 
-            if any(acc)
-                lnprob[S1[acc]] = newlnp[acc]
-                p[:,S1[acc]] = q[:,acc]
-                self.naccepted[S1[acc]] += 1
+            n=length(S1)
+            for i=1:n
+                if acc[i]
+                    S1i=S1[i]
+                    lnprob[S1i] = newlnp[i]
+                    for j=1:self.ndim
+                        p[j,S1i] = q[j,i]
+                    end
+                    self.naccepted[S1i] += 1
+                end
             end
         end
 
@@ -118,7 +119,8 @@ function propose_stretch(self::Sampler,
                          p2::Array{Float64,2},
                          lnp1::Vector{Float64})
     """
-    The Goodman and Weare proposal function
+    The Goodman and Weare proposal function and acceptance
+    criteria
     """
     nw1 = size(p1,2) # number of walkers
     nw2 = size(p2,2)
@@ -131,7 +133,9 @@ function propose_stretch(self::Sampler,
         z = ((self.a - 1.) * rand() + 1)^2 / self.a
         i2 = rand(1:nw2)
 
-        q[:,i1] = p2[:,i2] - z * (p2[:,i2] - p1[:,i1])
+        for j=1:self.ndim
+            q[j,i1] = p2[j,i2] - z * (p2[j,i2] - p1[j,i1])
+        end
         newlnprob[i1] = self.lnprobfn(q[:,i1], self.args...)
 
         lnpdiff = (self.ndim - 1.) * log(z) + newlnprob[i1] - lnp1[i1]
@@ -186,6 +190,7 @@ function getstats(fchain::Array{Float64,2})
     returns
     -------
     meanpars,cov
+        mean[ndim] and covariance[ndim,ndim]
     """
 
     (ndim,nstep)=size(fchain)
@@ -317,8 +322,8 @@ function test_line(; ntrial=1)
         slope_meas=means[2]
         slope_err=sqrt(cov[2,2])
 
-        println("offset: $offset_meas +/- $offset_err")
-        println("slope:  $slope_meas +/- $slope_err")
+        #println("offset: $offset_meas +/- $offset_err")
+        #println("slope:  $slope_meas +/- $slope_err")
 
         if ntrial > 1
             o_offset += offset_meas
