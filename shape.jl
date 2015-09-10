@@ -1,8 +1,15 @@
+# shapes
+#
+# currently the g1,g2  e1,e2 and eta1,eta2 styles are all carried around and
+# updated properly when you use the set_g! set_e! or set_eta! functions
+#
+
 module shape
 
 using mfloat
 
 export Shape
+export $
 
 type Shape
     g1::MFloat
@@ -17,6 +24,7 @@ type Shape
     # all zeros constructor
     Shape() = new(0.0,0.0,0.0,0.0,0.0,0.0)
 
+    # default constructor is for g1,g2
     function Shape(g1::MFloat, g2::MFloat) 
         self=Shape()
         set_g!(self, g1, g2)
@@ -25,16 +33,24 @@ type Shape
 
 end
 
+# a representation for the shape
+#function Base.(:$)(self::Shape)
+#    "g1: $(self.g1) g2: $(self.g2)"
+#end
 
-
+# a new shape explicitly noting the use of g1,g2
 function ShapeG(g1::MFloat, g2::MFloat)
     return Shape(g1,g2)
 end
+
+# a new shape explicitly noting the use of e1,e2
 function ShapeE(e1::MFloat, e2::MFloat)
     s=Shape()
     set_e!(s, e1, e2)
     return s
 end
+
+# a new shape explicitly noting the use of eta1,eta2
 function ShapeEta(eta1::MFloat, eta2::MFloat)
     s=Shape()
     set_eta!(s, eta1, eta2)
@@ -42,20 +58,38 @@ function ShapeEta(eta1::MFloat, eta2::MFloat)
 end
 
 
-(-)(self::Shape) = ShapeG(-self.g1, -self.g2)
+# get a new negated version of the shape
+Base.(:-)(self::Shape) = ShapeG(-self.g1, -self.g2)
 
-# shear comes second
-function (+)(self::Shape, sh::Shape)
+# get a new shape, sheared by the specified amount
+function shear(self::Shape, sh::Shape)
 
-    sout = deepcopy(self)
+    # zeros
+    out = Shape()
 
-    shear!(sout, sh)
+    A = 1 + self.g1*sh.g1 + self.g2*sh.g2
+    B = self.g2*sh.g1 - self.g1*sh.g2
+    denom_inv = 1./(A*A + B*B)
 
-    return sout
+    if sh.g1 != 0 || sh.g2 != 0
+
+        g1o = A*(self.g1 + sh.g1) + B*(self.g2 + sh.g2)
+        g2o = A*(self.g2 + sh.g2) - B*(self.g1 + sh.g1)
+
+        g1o *= denom_inv
+        g2o *= denom_inv
+
+        set_g!( out, g1o, g2o )
+    end
+
+    return out
+
 end
 
-# shear comes second
-function shear!(self::Shape, sh::Shape)
+# this version uses the distortion formula
+function shear_dist(self::Shape, sh::Shape)
+
+    new_shape = Shape()
 
     oneplusedot = 1.0 + self.e1*sh.e1 + self.e2*sh.e2
 
@@ -70,13 +104,12 @@ function shear!(self::Shape, sh::Shape)
         e1 /= oneplusedot
         e2 /= oneplusedot
 
-        set_e!(self, e1, e2)
+        set_e!(new_shape, e1, e2)
     end
 
-    return self
+    return new_shape
 
 end
-
 
 
 # set the shape given g1,g2 keeping e and eta consistent
@@ -112,6 +145,7 @@ function set_g!(self::Shape, g1::MFloat, g2::MFloat)
 
     end
 
+    return self
 end
 
 # set the shape given e1,e2 keeping g and eta consistent
@@ -148,6 +182,7 @@ function set_e!(self::Shape, e1::MFloat, e2::MFloat)
 
     end
 
+    return self
 end
 
 # set the shape given eta1,eta2 keeping g and e consistent
@@ -187,6 +222,7 @@ function set_eta!(self::Shape, eta1::MFloat, eta2::MFloat)
 
     end
 
+    return self
 end
 
 
