@@ -1,7 +1,7 @@
 """
 Defines the following types
 
-GMixPars
+SimplePars
 GMix
 
 """
@@ -11,6 +11,7 @@ module gmix
 import Base.length,
        Base.fill!,
        Base.getindex,
+       Base.string,
        Base.show,
        Base.start,
        Base.next,
@@ -21,11 +22,14 @@ import mfloat.MFloat
 
 using shape
 using gauss2d
+using point2d
+using cov2d
 
 # export means it can be imported, which is about extending it
 # remember all the symbols are available to those that "use" the module
-export GMix, GMixPars, GMixModel
+export GMix, SimplePars
 
+# models
 # no enums in Julia yet
 const GAUSS=1
 const FULL=2
@@ -39,55 +43,57 @@ const MAX_CHI2 = 25.0
 
 
 #
-# GMixPars represent parameters that can be used to construct
+# SimplePars represent parameters that can be used to construct
 # a GMix object
 #
 
 typealias GMixModel Int
 
-# note FULL not supported here
-type GMixPars
-    model::GMixModel
+type SimplePars
 
+    model::GMixModel
+    model_name::String
     pars::Vector{MFloat}
 
-    shape::Shape
+    function SimplePars(model, parsin)
+        """
+        parameters
+        ----------
+        model can either be the string or number version,
+        e.g. "exp" or EXP
+        """
 
-    function GMixPars(model::GMixModel, parsin)
+        if !(model in keys(SIMPLE_MODEL_NAMES))
+            throw(error("bad simple gmix model: $model"))
+        end
+
+        modnum = SIMPLE_MODEL_NUMS[model]
+        modname = SIMPLE_MODEL_NAMES[model]
+
         tpars = convert(Vector{MFloat}, parsin)
 
         npars=length(tpars)
         nexpected = GMIX_SIMPLE_NPARS[model]
         if npars != nexpected
-            throw(error("""
-                        for model $model expected $nexpected pars but 
-                        got $pars.model
-                        """))
+            throw(error("for model $model expected $nexpected pars " *
+                        "but got $npars"))
         end
 
-        # the current convention is to always have g1,g2 in the
-        # 3 4 slots
-        # note for FULL this would not make sense, as they can
-        # have different shapes
-        tshape = Shape(tpars[3], tpars[4])
-
-        new(model, tpars, tshape)
+        new(modnum, modname, tpars)
     end
 
 end
 
 # getindex can also be used like gmix_pars[ind]
-getindex(self::GMixPars, ind::Int) = self.pars[ind]
-length(self::GMixPars) = length(self.pars)
+getindex(self::SimplePars, ind::Int) = self.pars[ind]
+length(self::SimplePars) = length(self.pars)
 
-function show(io::Base.IO, self::GMixPars)
-    mname=gmix_names[self.model]
-    println(io,"model: $(mname)")
-    println(io,"pars:  $(self.pars)")
-    println(io,"shape: $(self.shape.g1) $(self.shape.g2)")
+function show(io::Base.IO, self::SimplePars)
+    print(io,"model: $(self.model_name)")
+    print(io,"pars:  $(self.pars)")
 end
 
-show(self::GMixPars) = show(STDOUT, self)
+show(self::SimplePars) = show(STDOUT, self)
 
 
 
@@ -104,10 +110,10 @@ type GMix
     function GMix(num::Int) 
         tmp = Array(Gauss2D, num)
 
-        if num > 0
-            for i=1:num
-                tmp[i] = Gauss2D()
-            end
+        for i=1:num
+            println("tmp[i] = Gauss2D()")
+            tmp[i] = Gauss2D()
+            println("done tmp[i] = Gauss2D()")
         end
 
         new(tmp)
@@ -115,29 +121,41 @@ type GMix
 
 end
 
-function simple_zeros(model::GMixModel) 
+function simple_zeros(model) 
     """
-    all zeros
+    make a gmix model, all zeros
     """
     ngauss=GMIX_SIMPLE_NGAUSS[model]
     return GMix(ngauss)
 end
-function make_model(pars::GMixPars)
+function make_simple(pars::SimplePars)
     """
-    The GMixPars fully describe the mixture
+    make a gmix model
+
+    parameters
+    ----------
+    pars: SimplePars
+        A full SimplePars instance
     """
     self=simple_zeros(pars.model)
 
-    fill!(self, pars)
+    fill_simple!(self, pars)
 
     return self
 end
-function make_model(model::GMixModel, pars)
+function make_simple(model, pars)
     """
-    the model and pars describe a GMixPars and in turn a GMix
+    make a gmix model
+
+    parameters
+    ----------
+    model: model indicator
+        e.g. EXP or "exp"
+    pars: array
+        e.g. [cen1,cen2,g1,g2,T,flux]
     """
-    gp = GMixPars(model, pars)
-    return make_model(gp)
+    gp = SimplePars(model, pars)
+    return make_simple(gp)
 end
 
 
@@ -145,13 +163,13 @@ end
 
 # from a parameters object
 # currently only for simple
-function fill!(self::GMix, pars::GMixPars)
+function fill_simple!(self::GMix, pars::SimplePars)
     if pars.model==EXP
-        fill_exp6!(self, pars)
+        fill_exp!(self, pars)
     elseif pars.model==GAUSS
         fill_gauss!(self, pars)
     else
-        throw(error("Bad GMixModel $(pars.model)"))
+        throw(error("fill_simple does not yet support $(pars.model)"))
     end
     return self
 end
@@ -164,29 +182,44 @@ start(self::GMix) = start(self.data)
 next(self::GMix, i) = next(self.data,i)
 done(self::GMix, i) = done(self.data,i)
 
-function show(io::Base.IO, self::GMix)
-    for g in self.data
-        show(io, g)
+function string(self::GMix)
+    s=[]
+    for g in self
+        push!(s, string(g) )
     end
+
+    join(s, " ")
+end
+function string(io::Base.IO, self::GMix)
+    print(io, string(self))
 end
 show(self::GMix) = show(STDOUT,self)
 
-function gmix_eval(self::GMix, x::MFloat, y::MFloat)
+function gmix_eval(self::GMix, pt::Point2D)
     """
-    fully inlined the Gauss2D evaluation, enourmously faster
-    
-    The compiler does not wish to inline; in the future there may be a inline
-    annotation for functions
+    Evaluate the gaussian mixture at the specified location
+    """
 
+    gmix_eval(self, x=pt.x, y=pt.y)
+end
+
+function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
+    """
+    Evaluate the gaussian mixture at the specified location
     """
     val::MFloat = 0.0
 
     for g in self
 
-        v = x-g.x
-        u = y-g.y
+        cen = g.cen
+        cov = g.cov
 
-        chi2 = g.dxx*u*u + g.dyy*v*v - 2.0*g.dxy*u*v
+        xdiff = x-cen.x
+        ydiff = y-cen.y
+
+        chi2 =       cov.dxx*ydiff*ydiff
+               +     cov.dyy*xdiff*xdiff
+               - 2.0*cov.dxy*ydiff*xdiff
 
         if chi2 < MAX_CHI2
             val += g.pnorm*exp( -0.5*chi2 )
@@ -205,44 +238,63 @@ function get_cen(self::GMix)
 
     for g in self
         psum += g.p
-        x += g.p*g.x
-        y += g.p*g.y
+        x += g.p*g.cen.x
+        y += g.p*g.cen.y
     end
 
     x /= psum
     y /= psum
 
-    return x,y
+    pt = Point2D(x=x, y=y)
+    return pt
 end
 
-function set_cen!(self::GMix, x::MFloat, y::MFloat)
-    x_cur, y_cur = get_cen(self)
+function set_cen!(self::GMix, pt::Point2D)
+    set_cen!(self, x=pt.x, y=pt.y)
+    return self
+end
 
-    x_shift = x-x_cur
-    y_shift = y-y_cur
+
+function set_cen!(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
+    x_shift = x-pt_cur.x
+    y_shift = y-pt_cur.y
 
     for g in self
         g.x += x_shift
         g.y += y_shift
     end
 
-    return x,y
+    return self
 end
 
-# only makes sense for co-centric gaussians; would
-# need to account for different centers
 function get_T(self::GMix)
-    T::MFloat = 0
+    """
+    use the parallel axis theorem
+    """
     psum::MFloat = 0
+
+    ixx::MFloat = 0
+    iyy::MFloat = 0
+
+    cen = get_cen(self)
 
     for g in self
         psum += g.p
-        T += g.p*(g.ixx + g.iyy)
+
+        xdiff = g.x - cen.x
+        ydiff = g.y - cen.y
+
+        ixx += g.p*(g.ixx + xdiff*xdiff)
+        iyy += g.p*(g.iyy + ydiff*ydiff)
+
     end
 
-    T /= psum
-    return T
+    ixx /= psum
+    iyy /= psum
+
+    ixx + iyy
 end
+
 function get_psum(self::GMix)
     psum::MFloat = 0
 
@@ -273,7 +325,11 @@ function convolve(obj::GMix, psf::GMix)
 
     return self
 end
+
 function convolve_fill!(self::GMix, obj::GMix, psf::GMix)
+    """
+    Convolve two gaussian mixtures, storing in self
+    """
     ntot = length(obj) * length(psf)
 
     sz=length(self)
@@ -281,27 +337,18 @@ function convolve_fill!(self::GMix, obj::GMix, psf::GMix)
         throw(error("convolve expected $ntot gauss but have $sz"))
     end
 
-    psf_xcen,psf_ycen = get_cen(psf)
-
-    psum::MFloat = 0
-    for g in psf
-        psum += g.p
-    end
+    psf_psum = get_psum(psf)
+    psf_cen = get_cen(psf)
 
     iself=1
     for og in obj
         for pg in psf
 
-            ixx = og.ixx + pg.ixx
-            ixy = og.ixy + pg.ixy
-            iyy = og.iyy + pg.iyy
+            cen = og.cen + (pg.cen - psf_cen)
+            cov = og.cov + pg.cov
 
-            x = og.x + (pg.x-psf_xcen)
-            y = og.y + (pg.y-psf_ycen)
-
-            fill!(self[iself],
-                  og.p*pg.p/psum,
-                  x,y,ixx,ixy,iyy)
+            p = og.p*pg.p/psf_psum,
+            gauss2d.fill!(self[iself], p=p, cen=cen, cov=cov)
             iself += 1
         end
     end
@@ -309,39 +356,69 @@ end
 
 
 
+# support string versions for when we read model
+# specs from a config file
+const GMIX_SIMPLE_NPARS = Dict(
+    GAUSS=>6,
+    EXP=>6,
+    DEV=>6,
+    TURB=>6,
+    "gauss"=>6,
+    "exp"=>6,
+    "dev"=>6,
+    "turb"=>6
+    )
 
-const GMIX_SIMPLE_NPARS = Dict(GAUSS=>6,
-                               EXP=>6,
-                               DEV=>6,
-                               TURB=>8)
-const GMIX_SIMPLE_NGAUSS = Dict(GAUSS=>1,
-                                EXP=>6,
-                                DEV=>10,
-                                TURB=>3)
+const GMIX_SIMPLE_NGAUSS = Dict(
+    GAUSS=>1,
+    EXP=>6,
+    DEV=>10,
+    TURB=>3,
+    "gauss"=>1,
+    "exp"=>6,
+    "dev"=>10,
+    "turb"=>3
+    )
 
-const gmix_names = Dict(GAUSS   => "GAUSS",
-                        FULL    => "FULL",
-                        COELLIP => "COELLIP",
-                        EXP     => "EXP",
-                        DEV     => "DEV",
-                        TURB    => "TURB")
+const SIMPLE_MODEL_NAMES = Dict(
+    GAUSS     => "gauss",
+    EXP       => "exp",
+    DEV       => "dev",
+    TURB      => "turb",
+    "gauss"   => "gauss",
+    "exp"     => "exp",
+    "dev"     => "dev",
+    "turb"    => "turb"
+    )
+
+const SIMPLE_MODEL_NUMS = Dict(
+    "gauss"   => GAUSS,
+    "exp"     => EXP,
+    "dev"     => DEV,
+    "turb"    => TURB,
+    GAUSS     => GAUSS,
+    EXP       => EXP,
+    DEV       => DEV,
+    TURB      => TURB
+    )
+
 
 
 # from Hogg & Lang, normalized
-const fvals_exp6 = MFloat[0.002467115141477932, 
-                          0.018147435573256168, 
-                          0.07944063151366336, 
-                          0.27137669897479122, 
-                          0.79782256866993773, 
-                          2.1623306025075739]
-const pvals_exp6 = MFloat[0.00061601229677880041, 
-                          0.0079461395724623237, 
-                          0.053280454055540001, 
-                          0.21797364640726541, 
-                          0.45496740582554868, 
-                          0.26521634184240478]
+const FVALS_EXP = MFloat[0.002467115141477932, 
+                         0.018147435573256168, 
+                         0.07944063151366336, 
+                         0.27137669897479122, 
+                         0.79782256866993773, 
+                         2.1623306025075739]
+const PVALS_EXP = MFloat[0.00061601229677880041, 
+                         0.0079461395724623237, 
+                         0.053280454055540001, 
+                         0.21797364640726541, 
+                         0.45496740582554868, 
+                         0.26521634184240478]
 
-function fill_exp6!(self::GMix, pars::GMixPars)
+function fill_exp!(self::GMix, pars::SimplePars)
     const ngauss_expected=6
 
     if pars.model != EXP
@@ -351,13 +428,13 @@ function fill_exp6!(self::GMix, pars::GMixPars)
         throw(error("expected ngauss=$ngauss_expected got $(length(self))"))
     end
 
-    fill_simple!(self, pars, fvals_exp6, pvals_exp6)
+    _fill_simple!(self, pars, FVALS_EXP, PVALS_EXP)
 end
 
-const fvals_gauss = MFloat[1.0]
-const pvals_gauss = MFloat[1.0]
+const FVALS_GAUSS = MFloat[1.0]
+const PVALS_GAUSS = MFloat[1.0]
 
-function fill_gauss!(self::GMix, pars::GMixPars)
+function fill_gauss!(self::GMix, pars::SimplePars)
     const ngauss_expected=1
 
     if pars.model != GAUSS
@@ -367,20 +444,38 @@ function fill_gauss!(self::GMix, pars::GMixPars)
         throw(error("expected ngauss=$ngauss_expected got $(length(self))"))
     end
 
-    fill_simple!(self, pars, fvals_gauss, pvals_gauss)
+    _fill_simple!(self, pars, FVALS_GAUSS, PVALS_GAUSS)
 end
 
 
 
-function fill_simple!(self::GMix,
-                      pars::GMixPars,
-                      fvals::Vector{MFloat},
-                      pvals::Vector{MFloat})
+function _fill_simple!(self::GMix,
+                       pars::SimplePars,
+                       fvals::Vector{MFloat},
+                       pvals::Vector{MFloat})
+    """
+    fill the gaussian mixture with the input parameters.
+    """
+
+    # error checking
+    npars=length(pars)
+    if npars != 6
+        throw(error("simple models should have 6 pars, got $npars"))
+    end
+
+    ng,nf,np = length(self), length(fvals), length(pvals)
+    if nf != ng || nf != np
+        throw(error("gmix has len $ng but fvals and pvals have len $nf,$np"))
+    end
+
 
     x      = pars[1]
     y      = pars[2]
     T      = pars[5]
     counts = pars[6]
+
+    cen = Point2D(x=x, y=y)
+    sh = Shape(pars[3], pars[4])
 
     for i=1:length(self)
         gauss=self[i]
@@ -388,17 +483,19 @@ function fill_simple!(self::GMix,
         T_i = T*fvals[i]
         counts_i=counts*pvals[i]
 
+        Thalf=T_i/2.0
+        iyy=Thalf*(1-sh.e1)
+        ixy=Thalf*sh.e2
+        ixx=Thalf*(1+sh.e1)
+
+        cov = Cov2D(iyy=iyy, ixy=ixy, ixx=ixx)
+
         gauss2d.fill!(gauss,
-                      counts_i,
-                      x,
-                      y,
-                      (T_i/2.)*(1+pars.shape.e1), # ixx
-                      (T_i/2.)*pars.shape.e2,     # ixy
-                      (T_i/2.)*(1-pars.shape.e1)) # iyy
+                      p=counts_i,
+                      cen=cen,
+                      cov=cov)
 
     end
-    return self
-
 end
 
 
@@ -418,14 +515,16 @@ end
 function draw_image!(self::GMix, image::Array{MFloat,2})
     """
     The mixture is *added* to the input image
+
+    note column-major memory layout
     """
 
-    nx,ny = size(image)
+    ny,nx = size(image)
     for ix=1:nx
         x = convert(MFloat, ix)
         for iy=1:ny
             y = convert(MFloat, iy)
-            image[ix,iy] += gmix_eval(self, x, y)
+            image[iy,ix] += gmix_eval(self, x=x, y=y)
         end
     end
 end
@@ -434,21 +533,26 @@ end
 function get_loglike(self::GMix,
                      image::Array{MFloat,2},
                      ivar::MFloat)
+    """
+    Calculate the likelihood of the mixture
+
+    note column-major memory layout
+    """
 
                  
     loglike::MFloat = 0.0
     s2n_numer::MFloat = 0.0
     s2n_denom::MFloat = 0.0
 
-    nx,ny = size(image)
+    ny,nx = size(image)
 
     for ix=1:nx
         x = convert(MFloat, ix)
         for iy=1:ny
             y = convert(MFloat, iy)
 
-            model_val = gmix_eval(self, x, y)
-            pixval = image[ix,iy]
+            model_val = gmix_eval(self, x=x, y=y)
+            pixval = image[iy,ix]
 
             diff = model_val-pixval
             loglike += diff*diff*ivar

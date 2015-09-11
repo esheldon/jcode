@@ -3,6 +3,9 @@ module gauss2d
 import Base.string, Base.show, Base.IO
 import mfloat.MFloat
 
+using point2d
+using cov2d
+
 # export means it can be imported, which is about extending it
 # remember all the symbols are available to those that "use" the module
 
@@ -15,97 +18,74 @@ export Gauss2D
 type Gauss2D
     p::MFloat
 
-    x::MFloat
-    y::MFloat
+    cen::Point2D
+    cov::Cov2D
 
-    ixx::MFloat
-    ixy::MFloat
-    iyy::MFloat
-
-    # derived quantities
-    det::MFloat
-
-    dxx::MFloat
-    dxy::MFloat
-    dyy::MFloat # iyy/det
-
-    norm::MFloat # 1/( 2*pi*sqrt(det) )
-
+    norm::MFloat # 1/( 2*pi*sqrt(cov.det) )
     pnorm::MFloat # p*norm
 
-    Gauss2D() = new(0.0,
-                    0.0,0.0,
-                    0.0,0.0,0.0,
-                    0.0,
-                    0.0,0.0,0.0,
-                    0.0,
-                    0.0)
+    Gauss2D() = new(1.0, Point2D(), Cov2D(), 1.0, 1.0)
 
-    function Gauss2D(p::MFloat,
-                     x::MFloat,
-                     y::MFloat,
-                     ixx::MFloat,
-                     ixy::MFloat,
-                     iyy::MFloat)
-        self=Gauss2D()
+    function Gauss2D(p::MFloat, cen::Point2D, cov::Cov2D)
 
-        fill!(self,p,y,x,iyy,ixy,ixx)
+        norm = 1./(2*pi*sqrt(cov.det))
+        pnorm = p*norm
 
-        return self
+        new(p, cen, cov, norm, pnorm)
     end
 
 end
 
 
+function string(self::Gauss2D) 
+    "p: $(self.p) cen: $(self.cen) cov: $(self.cov)"
+end
 function show(io::Base.IO, self::Gauss2D) 
-    println("p: $(self.p) x: $(self.x) y: $(self.y) ixx: $(self.ixx) ixy: $(self.ixy) iyy: $(self.iyy)")
+    print(io,string(self))
 end
 show(self::Gauss2D) = show(STDOUT, self)
 
 
-function fill!(self::Gauss2D,
-               p::MFloat,
-               x::MFloat,
-               y::MFloat,
-               ixx::MFloat,
-               ixy::MFloat,
-               iyy::MFloat)
-
-    self.det = iyy*ixx - ixy*ixy;
-
-    if self.det <= 0
-        throw(DomainError()) 
-    end
+function fill!(self::Gauss2D;
+               p::MFloat=1.0,
+               cen::Point2D=Point2D(),
+               cov::Cov2D=Cov2D(),
+               )
 
     self.p   = p
-    self.x = x
-    self.y = y
-    self.ixx = ixx
-    self.ixy = ixy
-    self.iyy = iyy
+    self.cen = cen
+    self.cov = cov
 
-    self.dxx = self.ixx/self.det
-    self.dxy = self.ixy/self.det
-    self.dyy = self.iyy/self.det
-    self.norm = 1./(2*pi*sqrt(self.det))
-
+    self.norm = 1./(2*pi*sqrt(self.cov.det))
     self.pnorm = p*self.norm
 
     return self
 end
 
-function eval(self::Gauss2D, x::MFloat, y::MFloat)
-    v = x-self.x
-    u = y-self.y
 
-    chi2 = self.dxx*u*u + self.dyy*v*v - 2.0*self.dxy*u*v
+function eval(self::Gauss2D, pt::Point2D)
+    eval(self, x=pt.x, y=pt.y)
+end
+
+
+function eval(self::Gauss2D; x::MFloat=0.0, y::MFloat=0.0)
+
+    cen = self.cen
+    cov = self.cov
+
+    xdiff = x-cen.x
+    ydiff = y-cen.y
+
+    chi2 =       cov.dxx*ydiff*ydiff
+           +     cov.dyy*xdiff*xdiff
+           - 2.0*cov.dxy*ydiff*xdiff
 
     val=0.0
     if chi2 < MAX_CHI2
         val = self.pnorm*exp( -0.5*chi2 )
     end
 
-    return val
+    val
 end
 
 

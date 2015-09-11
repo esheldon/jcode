@@ -6,10 +6,10 @@
 
 module shape
 
+import Base.show, Base.IO
 using mfloat
 
 export Shape
-export $
 
 type Shape
     g1::MFloat
@@ -32,11 +32,6 @@ type Shape
     end
 
 end
-
-# a representation for the shape
-#function Base.(:$)(self::Shape)
-#    "g1: $(self.g1) g2: $(self.g2)"
-#end
 
 # a new shape explicitly noting the use of g1,g2
 function ShapeG(g1::MFloat, g2::MFloat)
