@@ -13,8 +13,6 @@ type Point2D
     x::MFloat
     y::MFloat
 
-    #Point2D() = new(0.0,0.0)
-
     function Point2D(;
                      x::MFloat=0.0,
                      y::MFloat=0.0)

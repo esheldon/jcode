@@ -2,16 +2,8 @@ using gmix
 using Winston
 using Colors
 
-#function test_render(model; T=16.0, g1=0.2, g2=0.3, show=false)
+function test_render(model; T=16.0, g1=0.1, g2=0.3, flux=100.0, show=false)
 
-
-    model=gmix.GAUSS
-    T=16.0
-    g1=0.2
-    g2=0.3
-    show=false
-
-    flux=100.0
     sigma=sqrt(T/2.0)
     dim=ceil(Int, 2.0*5.0*sigma)
 
@@ -28,11 +20,11 @@ using Colors
     if show
         cmap = reverse(Colors.colormap("grays"))
         Winston.colormap(cmap)
-        implt=Winston.imagesc(im)
+        implt=Winston.imagesc( (0,dim), (dim,0), im )
         setattr(implt, aspect_ratio=1.0)
 
         Winston.display(implt)
-        junk = readline(STDIN)
+        #junk = readline(STDIN)
     end
 
-#end
+end

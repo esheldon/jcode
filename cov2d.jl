@@ -21,17 +21,13 @@ type Cov2D
 
     dxx::MFloat
     dxy::MFloat
-    dyy::MFloat # iyy/det
-
-    #Cov2D() = new(1.0,0.0,1.0,
-    #              1.0,
-    #              1.0,0.0,1.0)
+    dyy::MFloat
 
     function Cov2D(; ixx::MFloat=1.0,
                      ixy::MFloat=0.0,
                      iyy::MFloat=1.0)
 
-        det = ixx*iyy - ixy*ixy
+        det = ixx*iyy - ixy^2
         if det <= 0.0
             throw(DomainError("singular cov, det = $(det)"))
         end
@@ -55,12 +51,10 @@ Base.(:-)(cov1::Cov2D, cov2::Cov2D) = Cov2D(ixx=cov1.ixx-cov2.ixx,
                                             iyy=cov1.iyy-cov2.iyy)
 
 
-function string(self::Cov2D)
-    "ixx: $(self.ixx) ixy: $(self.ixy) iyy: $(self.iyy)"
-end
-function show(io::Base.IO, self::Cov2D) 
-    print(io, string(self))
-end
+string(self::Cov2D) = "ixx: $(self.ixx) ixy: $(self.ixy) iyy: $(self.iyy)"
+
+show(io::Base.IO, self::Cov2D) = print(io, string(self))
+
 show(self::Cov2D) = show(STDOUT, self)
 
 

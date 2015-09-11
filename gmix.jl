@@ -105,15 +105,11 @@ show(self::SimplePars) = show(STDOUT, self)
 type GMix
     data::Vector{Gauss2D}
 
-    GMix() = new(Array(Gauss2D,0))
-
     function GMix(num::Int) 
         tmp = Array(Gauss2D, num)
 
         for i=1:num
-            println("tmp[i] = Gauss2D()")
             tmp[i] = Gauss2D()
-            println("done tmp[i] = Gauss2D()")
         end
 
         new(tmp)
@@ -121,6 +117,195 @@ type GMix
 
 end
 
+# indexing and iteration
+# getindex can also be used like gmix[ind]
+getindex(self::GMix, ind::Int) = self.data[ind]
+length(self::GMix) = length(self.data)
+start(self::GMix) = start(self.data)
+next(self::GMix, i) = next(self.data,i)
+done(self::GMix, i) = done(self.data,i)
+
+# stringify and showing
+function string(self::GMix)
+    s=[]
+    for g in self
+        push!(s, string(g) )
+    end
+
+    join(s, " ")
+end
+function string(io::Base.IO, self::GMix)
+    print(io, string(self))
+end
+show(self::GMix) = show(STDOUT,self)
+
+# evaluation and properties
+function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
+    """
+    Evaluate the gaussian mixture at the specified location
+    """
+    val::MFloat = 0.0
+
+    for g in self
+
+        cen = g.cen
+        cov = g.cov
+
+        xd = x-cen.x
+        yd = y-cen.y
+
+        chi2 = (      cov.dxx * yd^2
+                +     cov.dyy * xd^2
+                - 2.0*cov.dxy * xd*yd )
+
+        if chi2 < MAX_CHI2
+            val += g.pnorm*exp( -0.5*chi2 )
+        end
+
+    end
+
+    val
+end
+
+function gmix_eval(self::GMix, pt::Point2D)
+    """
+    Evaluate the gaussian mixture at the specified location
+    """
+
+    gmix_eval(self, x=pt.x, y=pt.y)
+end
+
+
+
+function get_cen(self::GMix)
+    x::MFloat = 0
+    y::MFloat = 0
+    psum::MFloat = 0
+
+    for g in self
+        psum += g.p
+        x += g.p*g.cen.x
+        y += g.p*g.cen.y
+    end
+
+    x /= psum
+    y /= psum
+
+    Point2D(x=x, y=y)
+end
+
+function set_cen!(self::GMix, pt::Point2D)
+    set_cen!(self, x=pt.x, y=pt.y)
+end
+
+
+function set_cen!(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
+
+    pt_cur = get_cen(self)
+
+    x_shift = x-pt_cur.x
+    y_shift = y-pt_cur.y
+
+    for g in self
+        g.x += x_shift
+        g.y += y_shift
+    end
+end
+
+function get_T(self::GMix)
+    """
+    use the parallel axis theorem
+    """
+    psum::MFloat = 0
+
+    ixx::MFloat = 0
+    iyy::MFloat = 0
+
+    cen = get_cen(self)
+
+    for g in self
+        psum += g.p
+
+        xdiff = g.x - cen.x
+        ydiff = g.y - cen.y
+
+        ixx += g.p*(g.ixx + xdiff*xdiff)
+        iyy += g.p*(g.iyy + ydiff*ydiff)
+
+    end
+
+    ixx /= psum
+    iyy /= psum
+
+    ixx + iyy
+end
+
+function get_psum(self::GMix)
+    psum::MFloat = 0
+
+    for g in self
+        psum += g.p
+    end
+    psum
+end
+function set_psum!(self::GMix, psum::MFloat)
+    psum_cur = get_psum(self)
+    rat = psum/psum_cur
+
+    for g in self
+        g.p *= rat
+    end
+
+    psum
+end
+
+
+# convolutions
+function convolve(obj::GMix, psf::GMix)
+    """
+    Convolve a gaussian mixture with a psf to get a new mixture
+    """
+
+    ntot = length(obj) * length(psf)
+
+    self = GMix(ntot)
+
+    convolve_fill!(self, obj, psf)
+
+    self
+end
+
+function convolve_fill!(self::GMix, obj::GMix, psf::GMix)
+    """
+    Convolve two gaussian mixtures, storing in self
+    """
+    ntot = length(obj) * length(psf)
+
+    sz=length(self)
+    if ntot != sz
+        throw(error("convolve expected $ntot gauss but have $sz"))
+    end
+
+    psf_psum = get_psum(psf)
+    psf_cen = get_cen(psf)
+
+    iself=1
+    for og in obj
+        for pg in psf
+
+            cen = og.cen + (pg.cen - psf_cen)
+            cov = og.cov + pg.cov
+
+            p = og.p*pg.p/psf_psum,
+            gauss2d.fill!(self[iself], p=p, cen=cen, cov=cov)
+            iself += 1
+        end
+    end
+end
+
+
+
+# creating models
 function simple_zeros(model) 
     """
     make a gmix model, all zeros
@@ -160,9 +345,7 @@ end
 
 
 
-
-# from a parameters object
-# currently only for simple
+# filling existing gmix objects from parameters
 function fill_simple!(self::GMix, pars::SimplePars)
     if pars.model==EXP
         fill_exp!(self, pars)
@@ -171,188 +354,89 @@ function fill_simple!(self::GMix, pars::SimplePars)
     else
         throw(error("fill_simple does not yet support $(pars.model)"))
     end
-    return self
 end
 
-# indexing and iteration
-# getindex can also be used like gmix[ind]
-getindex(self::GMix, ind::Int) = self.data[ind]
-length(self::GMix) = length(self.data)
-start(self::GMix) = start(self.data)
-next(self::GMix, i) = next(self.data,i)
-done(self::GMix, i) = done(self.data,i)
+function fill_exp!(self::GMix, pars::SimplePars)
+    const ngauss_expected=6
 
-function string(self::GMix)
-    s=[]
-    for g in self
-        push!(s, string(g) )
+    if pars.model != EXP
+        throw(error("expected model==EXP got $pars.model"))
+    end
+    if length(self) != ngauss_expected
+        throw(error("expected ngauss=$ngauss_expected got $(length(self))"))
     end
 
-    join(s, " ")
-end
-function string(io::Base.IO, self::GMix)
-    print(io, string(self))
-end
-show(self::GMix) = show(STDOUT,self)
-
-function gmix_eval(self::GMix, pt::Point2D)
-    """
-    Evaluate the gaussian mixture at the specified location
-    """
-
-    gmix_eval(self, x=pt.x, y=pt.y)
+    _fill_simple!(self, pars, FVALS_EXP, PVALS_EXP)
 end
 
-function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
-    """
-    Evaluate the gaussian mixture at the specified location
-    """
-    val::MFloat = 0.0
 
-    for g in self
+function fill_gauss!(self::GMix, pars::SimplePars)
+    const ngauss_expected=1
 
-        cen = g.cen
-        cov = g.cov
-
-        xdiff = x-cen.x
-        ydiff = y-cen.y
-
-        chi2 =       cov.dxx*ydiff*ydiff
-               +     cov.dyy*xdiff*xdiff
-               - 2.0*cov.dxy*ydiff*xdiff
-
-        if chi2 < MAX_CHI2
-            val += g.pnorm*exp( -0.5*chi2 )
-        end
-
+    if pars.model != GAUSS
+        throw(error("expected model==GAUSS got $pars.model"))
+    end
+    if length(self) != ngauss_expected
+        throw(error("expected ngauss=$ngauss_expected got $(length(self))"))
     end
 
-    return val
+    _fill_simple!(self, pars, FVALS_GAUSS, PVALS_GAUSS)
 end
 
 
-function get_cen(self::GMix)
-    x::MFloat = 0
-    y::MFloat = 0
-    psum::MFloat = 0
 
-    for g in self
-        psum += g.p
-        x += g.p*g.cen.x
-        y += g.p*g.cen.y
-    end
-
-    x /= psum
-    y /= psum
-
-    pt = Point2D(x=x, y=y)
-    return pt
-end
-
-function set_cen!(self::GMix, pt::Point2D)
-    set_cen!(self, x=pt.x, y=pt.y)
-    return self
-end
-
-
-function set_cen!(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
-    x_shift = x-pt_cur.x
-    y_shift = y-pt_cur.y
-
-    for g in self
-        g.x += x_shift
-        g.y += y_shift
-    end
-
-    return self
-end
-
-function get_T(self::GMix)
+function _fill_simple!(self::GMix,
+                       pars::SimplePars,
+                       fvals::Vector{MFloat},
+                       pvals::Vector{MFloat})
     """
-    use the parallel axis theorem
+    fill the gaussian mixture with the input parameters.
     """
-    psum::MFloat = 0
 
-    ixx::MFloat = 0
-    iyy::MFloat = 0
-
-    cen = get_cen(self)
-
-    for g in self
-        psum += g.p
-
-        xdiff = g.x - cen.x
-        ydiff = g.y - cen.y
-
-        ixx += g.p*(g.ixx + xdiff*xdiff)
-        iyy += g.p*(g.iyy + ydiff*ydiff)
-
+    # error checking
+    npars=length(pars)
+    if npars != 6
+        throw(error("simple models should have 6 pars, got $npars"))
     end
 
-    ixx /= psum
-    iyy /= psum
-
-    ixx + iyy
-end
-
-function get_psum(self::GMix)
-    psum::MFloat = 0
-
-    for g in self
-        psum += g.p
-    end
-    return psum
-end
-function set_psum!(self::GMix, psum::MFloat)
-    psum_cur = get_psum(self)
-    rat = psum/psum_cur
-
-    for g in self
-        g.p *= rat
+    ng,nf,np = length(self), length(fvals), length(pvals)
+    if nf != ng || nf != np
+        throw(error("gmix has len $ng but fvals and pvals have len $nf,$np"))
     end
 
-    return psum
-end
 
-function convolve(obj::GMix, psf::GMix)
-    """
-    Convolve a gaussian mixture with a psf to get a new mixture
-    """
-    ntot = length(obj) * length(psf)
-    self = GMix(ntot)
+    y    = pars[1]
+    x    = pars[2]
+    g1   = pars[3]
+    g2   = pars[4]
+    T    = pars[5]
+    flux = pars[6]
 
-    convolve_fill!(self, obj, psf)
+    sh = Shape(g1, g2)
 
-    return self
-end
+    for i=1:length(self)
+        gauss=self[i]
 
-function convolve_fill!(self::GMix, obj::GMix, psf::GMix)
-    """
-    Convolve two gaussian mixtures, storing in self
-    """
-    ntot = length(obj) * length(psf)
+        T_i = T*fvals[i]
+        flux_i=flux*pvals[i]
 
-    sz=length(self)
-    if ntot != sz
-        throw(error("convolve expected $ntot gauss but have $sz"))
-    end
+        Thalf=T_i/2.0
 
-    psf_psum = get_psum(psf)
-    psf_cen = get_cen(psf)
+        iyy=Thalf*(1-sh.e1)
+        ixy=Thalf*sh.e2
+        ixx=Thalf*(1+sh.e1)
 
-    iself=1
-    for og in obj
-        for pg in psf
+        cen = Point2D(x=x, y=y)
+        cov = Cov2D(iyy=iyy, ixy=ixy, ixx=ixx)
 
-            cen = og.cen + (pg.cen - psf_cen)
-            cov = og.cov + pg.cov
+        gauss2d.fill!(gauss,
+                      p=flux_i,
+                      cen=cen,
+                      cov=cov)
 
-            p = og.p*pg.p/psf_psum,
-            gauss2d.fill!(self[iself], p=p, cen=cen, cov=cov)
-            iself += 1
-        end
     end
 end
+
 
 
 
@@ -418,85 +502,8 @@ const PVALS_EXP = MFloat[0.00061601229677880041,
                          0.45496740582554868, 
                          0.26521634184240478]
 
-function fill_exp!(self::GMix, pars::SimplePars)
-    const ngauss_expected=6
-
-    if pars.model != EXP
-        throw(error("expected model==EXP got $pars.model"))
-    end
-    if length(self) != ngauss_expected
-        throw(error("expected ngauss=$ngauss_expected got $(length(self))"))
-    end
-
-    _fill_simple!(self, pars, FVALS_EXP, PVALS_EXP)
-end
-
 const FVALS_GAUSS = MFloat[1.0]
 const PVALS_GAUSS = MFloat[1.0]
-
-function fill_gauss!(self::GMix, pars::SimplePars)
-    const ngauss_expected=1
-
-    if pars.model != GAUSS
-        throw(error("expected model==GAUSS got $pars.model"))
-    end
-    if length(self) != ngauss_expected
-        throw(error("expected ngauss=$ngauss_expected got $(length(self))"))
-    end
-
-    _fill_simple!(self, pars, FVALS_GAUSS, PVALS_GAUSS)
-end
-
-
-
-function _fill_simple!(self::GMix,
-                       pars::SimplePars,
-                       fvals::Vector{MFloat},
-                       pvals::Vector{MFloat})
-    """
-    fill the gaussian mixture with the input parameters.
-    """
-
-    # error checking
-    npars=length(pars)
-    if npars != 6
-        throw(error("simple models should have 6 pars, got $npars"))
-    end
-
-    ng,nf,np = length(self), length(fvals), length(pvals)
-    if nf != ng || nf != np
-        throw(error("gmix has len $ng but fvals and pvals have len $nf,$np"))
-    end
-
-
-    x      = pars[1]
-    y      = pars[2]
-    T      = pars[5]
-    counts = pars[6]
-
-    cen = Point2D(x=x, y=y)
-    sh = Shape(pars[3], pars[4])
-
-    for i=1:length(self)
-        gauss=self[i]
-
-        T_i = T*fvals[i]
-        counts_i=counts*pvals[i]
-
-        Thalf=T_i/2.0
-        iyy=Thalf*(1-sh.e1)
-        ixy=Thalf*sh.e2
-        ixx=Thalf*(1+sh.e1)
-
-        cov = Cov2D(iyy=iyy, ixy=ixy, ixx=ixx)
-
-        gauss2d.fill!(gauss,
-                      p=counts_i,
-                      cen=cen,
-                      cov=cov)
-
-    end
-end
 
 
 #
@@ -509,7 +516,7 @@ function make_image(self::GMix, dims)
     """
     im=zeros(MFloat,dims)
     draw_image!(self, im)
-    return im
+    im
 end
 
 function draw_image!(self::GMix, image::Array{MFloat,2})
@@ -522,8 +529,10 @@ function draw_image!(self::GMix, image::Array{MFloat,2})
     ny,nx = size(image)
     for ix=1:nx
         x = convert(MFloat, ix)
+
         for iy=1:ny
             y = convert(MFloat, iy)
+
             image[iy,ix] += gmix_eval(self, x=x, y=y)
         end
     end

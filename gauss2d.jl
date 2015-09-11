@@ -37,12 +37,10 @@ type Gauss2D
 end
 
 
-function string(self::Gauss2D) 
-    "p: $(self.p) cen: $(self.cen) cov: $(self.cov)"
-end
-function show(io::Base.IO, self::Gauss2D) 
-    print(io,string(self))
-end
+string(self::Gauss2D) = "p: $(self.p) cen: $(self.cen) cov: $(self.cov)"
+
+show(io::Base.IO, self::Gauss2D) = print(io,string(self))
+
 show(self::Gauss2D) = show(STDOUT, self)
 
 
@@ -73,12 +71,12 @@ function eval(self::Gauss2D; x::MFloat=0.0, y::MFloat=0.0)
     cen = self.cen
     cov = self.cov
 
-    xdiff = x-cen.x
-    ydiff = y-cen.y
+    xd = x-cen.x
+    yd = y-cen.y
 
-    chi2 =       cov.dxx*ydiff*ydiff
-           +     cov.dyy*xdiff*xdiff
-           - 2.0*cov.dxy*ydiff*xdiff
+    chi2 =(       cov.dxx*yd*yd
+            +     cov.dyy*xd*xd
+            - 2.0*cov.dxy*yd*xd )
 
     val=0.0
     if chi2 < MAX_CHI2

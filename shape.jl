@@ -6,7 +6,7 @@
 
 module shape
 
-import Base.show, Base.IO
+import Base.show, Base.IO, Base.string
 using mfloat
 
 export Shape
@@ -33,10 +33,13 @@ type Shape
 
 end
 
+string(self::Shape) = "g: ($(self.g1), $(self.g2)) e: ($(self.e1), $(self.e2) eta: ($(self.eta1), $(self.eta2))"
+
+show(io::Base.IO, self::Shape) = print(io,string(self))
+show(self::Shape) = show(STDOUT, self)
+
 # a new shape explicitly noting the use of g1,g2
-function ShapeG(g1::MFloat, g2::MFloat)
-    return Shape(g1,g2)
-end
+ShapeG(g1::MFloat, g2::MFloat) = Shape(g1,g2)
 
 # a new shape explicitly noting the use of e1,e2
 function ShapeE(e1::MFloat, e2::MFloat)
@@ -116,7 +119,7 @@ function set_g!(self::Shape, g1::MFloat, g2::MFloat)
     g=sqrt(g1*g1 + g2*g2)
 
     if g >= 1
-        throw(DomainError())
+        throw(DomainError("g >= 1: $(g)"))
     elseif g==0
         self.e1=0
         self.e2=0
@@ -220,6 +223,12 @@ function set_eta!(self::Shape, eta1::MFloat, eta2::MFloat)
     return self
 end
 
+function test()
+
+    s=Shape(0.2, 0.3)
+    println(s)
+
+end
 
 
 
