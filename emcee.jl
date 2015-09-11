@@ -12,19 +12,20 @@ type Sampler
     ndim::Int            # number of dimensions
     niter::Int           # number of iterations
     lnprobfn::Function   # function to get ln(prob)
-    args::(Any...)       # extra arguments
+
+    args                 # optional extra arguments for lnprobfn
 
     a::Float64           # affine stretch parameter optional
 
-    chain                # holds the chain data
-    lnprob               # holds lnprob at each step
-    naccepted            # number accepted at each step
+    chain::Any                # holds the chain data
+    lnprob::Any               # holds lnprob at each step
+    naccepted::Any            # number accepted at each step
 
     function Sampler(nwalkers::Int,
                      ndim::Int,
                      lnprobfn::Function,
-                     args::(Any...);
-                     a::Float64=2.0)
+                     args...;
+                     a=2.0)
         if (nwalkers % 2) != 0
             throw(error("number of walkers must be even, got $nwalkers"))
         end
@@ -41,8 +42,16 @@ type Sampler
         noiter=0
         nolnprob=None
         noaccepted=None
-        new(nwalkers, ndim, noiter, lnprobfn, args, a,
-            nochain, nolnprob, noaccepted)
+
+        new(nwalkers,
+            ndim,
+            noiter,
+            lnprobfn,
+            args,
+            convert(Float64,a),
+            nochain,
+            nolnprob,
+            noaccepted)
     end
 end
 
@@ -86,8 +95,8 @@ function sample!(self::Sampler,
         lnprob = get_lnprob_walkers(self, p) # current set of lnprobs
     end
 
-    first = [1:halfk]
-    second = [(halfk+1):self.nwalkers]
+    first = collect(1:halfk)
+    second = collect( (halfk+1):self.nwalkers )
 
     for iter=1:niter
         for (S1, S2) in [(first, second), (second, first)]
@@ -288,7 +297,7 @@ function test_line(; ntrial=1)
     ivar = 1./(yerr*yerr)
     npoints=25*25
 
-    x = linspace(0.0, 5.0, npoints)
+    x = collect( linspace(0.0, 5.0, npoints) )
 
     y0 = offset + slope*x
 
@@ -303,9 +312,9 @@ function test_line(; ntrial=1)
     for i=1:ntrial
 
         y = y0 + yerr*randn(npoints)
-        args=(x,y,ivar)
+        #args=(x,y,ivar)
 
-        sampler=Sampler(nwalkers, ndim, line_lnprob_func, args)
+        sampler=Sampler(nwalkers, ndim, line_lnprob_func, x, y, ivar)
 
         # adding offset to guesses
         pstart[1,:] = 0.2 + offset + 0.1*randn(nwalkers)
@@ -322,8 +331,10 @@ function test_line(; ntrial=1)
         slope_meas=means[2]
         slope_err=sqrt(cov[2,2])
 
-        #println("offset: $offset_meas +/- $offset_err")
-        #println("slope:  $slope_meas +/- $slope_err")
+        if ntrial==1
+            println("offset: $offset_meas +/- $offset_err")
+            println("slope:  $slope_meas +/- $slope_err")
+        end
 
         if ntrial > 1
             o_offset += offset_meas
