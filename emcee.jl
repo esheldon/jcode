@@ -303,7 +303,7 @@ function test_line(; ntrial=1)
     slope=2.0
     yerr=0.3
     ivar = 1./(yerr*yerr)
-    npoints=25*25
+    npoints=25
 
     x = collect( linspace(0.0, 5.0, npoints) )
 
