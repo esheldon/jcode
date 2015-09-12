@@ -1,7 +1,9 @@
 """
-TODO 
-    - add reset?
-    - add parallel?
+julia clone of the python package emcee. Only the
+affine invariante sampler is implemented
+
+example
+-------
 """
 module emcee
 
@@ -56,7 +58,7 @@ type Sampler
 end
 
 function sample!(self::Sampler,
-                 pstart::Array{Float64,2}, # (ndim,nwalkers)
+                 pstart::Array{Float64,2}, # (nwalkers,ndim)
                  niter::Int;
                  lnprob=None)
     """
@@ -68,7 +70,7 @@ function sample!(self::Sampler,
         The sampler. The internal chain, lnprop,niter,naccepted
         values are modified.
     pstart::Array{Float64,2}
-        The starting position, shape (ndim, nwalkers)
+        The starting position, shape (nwalkers,ndim)
     niter::Int
         Number of iterations to perform
     lnprob: optional 
@@ -87,8 +89,10 @@ function sample!(self::Sampler,
     halfk=fld(self.nwalkers,2)
 
     self.niter=niter
-    self.chain = zeros(self.ndim, self.niter, self.nwalkers)
-    self.lnprob = zeros(self.niter, self.nwalkers)
+    #self.chain = zeros(self.ndim, self.niter, self.nwalkers)
+    self.chain = zeros(self.nwalkers, self.niter, self.ndim)
+    #self.lnprob = zeros(self.niter, self.nwalkers)
+    self.lnprob = zeros(self.nwalkers, self.niter)
     self.naccepted = zeros(self.nwalkers)
     
     if lnprob == None
@@ -100,7 +104,7 @@ function sample!(self::Sampler,
 
     for iter=1:niter
         for (S1, S2) in [(first, second), (second, first)]
-            q, newlnp, acc = propose_stretch(self,p[:,S1],p[:,S2],lnprob[S1])
+            q, newlnp, acc = propose_stretch(self,p[S1,:],p[S2,:],lnprob[S1])
 
             n=length(S1)
             for i=1:n
@@ -108,15 +112,16 @@ function sample!(self::Sampler,
                     S1i=S1[i]
                     lnprob[S1i] = newlnp[i]
                     for j=1:self.ndim
-                        p[j,S1i] = q[j,i]
+                        p[S1i,j] = q[i,j]
                     end
                     self.naccepted[S1i] += 1
                 end
             end
         end
 
-        self.chain[:,iter,:] = reshape(p, (self.ndim,1,self.nwalkers))
-        self.lnprob[iter,:] = lnprob
+        #self.chain[:,iter,:] = reshape(p, (self.ndim,1,self.nwalkers))
+        self.chain[:,iter,:] = p
+        self.lnprob[:,iter] = lnprob
     end
 
     return p, lnprob
@@ -131,10 +136,10 @@ function propose_stretch(self::Sampler,
     The Goodman and Weare proposal function and acceptance
     criteria
     """
-    nw1 = size(p1,2) # number of walkers
-    nw2 = size(p2,2)
+    nw1 = size(p1,1) # number of walkers
+    nw2 = size(p2,1)
 
-    q=zeros( (self.ndim, nw1) )
+    q=zeros( (nw1,self.ndim) )
     newlnprob = zeros(nw1)
     accept = zeros(Bool, nw1)
 
@@ -143,9 +148,11 @@ function propose_stretch(self::Sampler,
         i2 = rand(1:nw2)
 
         for j=1:self.ndim
-            q[j,i1] = p2[j,i2] - z * (p2[j,i2] - p1[j,i1])
+            q[i1,j] = p2[i2,j] - z * (p2[i2,j] - p1[i1,j])
         end
-        newlnprob[i1] = self.lnprobfn(q[:,i1], self.args...)
+
+        vq = vec(q[i1,:] )
+        newlnprob[i1] = self.lnprobfn(vq, self.args...)
 
         lnpdiff = (self.ndim - 1.) * log(z) + newlnprob[i1] - lnp1[i1]
         accept[i1] = lnpdiff > log(rand())
@@ -161,10 +168,10 @@ function get_lnprob_walkers(self::Sampler,
     """
     Get lnprob for each walker in the pars array
     """
-    nwalkers=size(pars,2)
+    nwalkers=size(pars,1)
     lnprob = zeros(nwalkers)
     for i=1:nwalkers
-        tpars = pars[:, i] # makes a copy
+        tpars = vec( pars[i,:] )
         lnprob[i] = self.lnprobfn(tpars, self.args...)
     end
 
@@ -185,7 +192,7 @@ function flatchain(self::Sampler)
     The flattened chain of shape (ndim, niter*nwalkers)
     """
     dims=size(self.chain)
-    flatdims = (dims[1], dims[2]*dims[3])
+    flatdims = (dims[1] * dims[2], dims[3])
     return reshape(self.chain, flatdims)
 end
 
@@ -202,22 +209,22 @@ function getstats(fchain::Array{Float64,2})
         mean[ndim] and covariance[ndim,ndim]
     """
 
-    (ndim,nstep)=size(fchain)
+    nstep,ndim=size(fchain)
 
     meanpars = zeros(ndim)
     cov = zeros( (ndim, ndim) )
 
     for dim=1:ndim
-        meanpars[dim] = mean(fchain[dim,:])
+        meanpars[dim] = mean(fchain[:,dim])
     end
 
     for i=1:ndim
-        idiff = fchain[i,:]-meanpars[i]
+        idiff = fchain[:,i]-meanpars[i]
         for j=1:ndim
             if i==j
                 jdiff = idiff
             else
-                jdiff = fchain[j,:]-meanpars[j]
+                jdiff = fchain[:,j]-meanpars[j]
             end
 
             cov[i,j] = sum(idiff .* jdiff)/(nstep-1.)
@@ -240,16 +247,17 @@ function check_inputs(self::Sampler, p0::Array{Float64})
         """
         throw(error(err))
     end
-    if sz[1] != self.ndim
+    if sz[1] != self.nwalkers
         err="""
-        p0 must have first dimension of size ndim=$(self.ndim)
+        p0 must have first dimension of size nwalkers=$(self.nwalkers)
         but got $sz[1]
         """
         throw(error(err))
     end
-    if sz[2] != self.nwalkers
+
+    if sz[2] != self.ndim
         err="""
-        p0 must have second dimension of size nwalkers=$(self.nwalkers)
+        p0 must have second dimension of size ndim=$(self.ndim)
         but got $sz[2]
         """
         throw(error(err))
@@ -301,7 +309,7 @@ function test_line(; ntrial=1)
 
     y0 = offset + slope*x
 
-    pstart=zeros( (ndim, nwalkers) )
+    pstart=zeros( nwalkers, ndim )
 
     println("true offset: $offset")
     println("true slope:  $slope")
@@ -317,8 +325,8 @@ function test_line(; ntrial=1)
         sampler=Sampler(nwalkers, ndim, line_lnprob_func, x, y, ivar)
 
         # adding offset to guesses
-        pstart[1,:] = 0.2 + offset + 0.1*randn(nwalkers)
-        pstart[2,:] = 0.1 + slope + 0.1*randn(nwalkers)
+        pstart[:,1] = 0.2 + offset + 0.1*randn(nwalkers)
+        pstart[:,2] = 0.1 + slope + 0.1*randn(nwalkers)
 
         p,lnp=sample!(sampler, pstart, burnin)
         p,lnp=sample!(sampler, p, nsteps, lnprob=lnp)
