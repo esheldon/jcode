@@ -317,6 +317,8 @@ function test_line(; ntrial=1)
     o_slope=0.0
     o_offset_ivarsum = 0.0
     o_slope_ivarsum = 0.0
+
+    last_sampler=null
     for i=1:ntrial
 
         y = y0 + yerr*randn(npoints)
@@ -350,6 +352,8 @@ function test_line(; ntrial=1)
             o_slope += slope_meas
             o_slope_ivarsum += (1.0/slope_err)^2
         end
+
+        last_sampler=sampler
     end
 
     if ntrial > 1
@@ -362,6 +366,8 @@ function test_line(; ntrial=1)
         println("overall offset: $o_offset +/- $o_offset_err")
         println("overall slope:  $o_slope +/- $o_slope_err")
     end
+
+    last_sampler
 end
 
 end
