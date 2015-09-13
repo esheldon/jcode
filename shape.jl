@@ -1,12 +1,12 @@
-# shapes
+# shape
+# Defines the Shape type and operations
 #
-# currently the g1,g2  e1,e2 and eta1,eta2 styles are all carried around and
-# updated properly when you use the set_g! set_e! or set_eta! functions
 #
+
 
 module shape
 
-import Base.show, Base.IO, Base.string
+import Base.show, Base.IO, Base.string, Base.isequal
 using mfloat
 
 export Shape
@@ -59,11 +59,6 @@ immutable Shape
     end
 
 end
-
-string(self::Shape) = "g: ($(self.g1), $(self.g2)) e: ($(self.e1), $(self.e2) eta: ($(self.eta1), $(self.eta2))"
-
-show(io::Base.IO, self::Shape) = print(io,string(self))
-show(self::Shape) = show(STDOUT, self)
 
 # a new shape explicitly noting the use of g1,g2
 ShapeG(g1::MFloat, g2::MFloat) = Shape(g1,g2)
@@ -137,11 +132,27 @@ function ShapeEta(eta1::MFloat, eta2::MFloat)
     Shape(g1,g2,e1,e2,eta1,eta2)
 end
 
+#
+# representation
+#
 
-# get a new negated version of the shape
+string(self::Shape) = "g: ($(self.g1), $(self.g2)) e: ($(self.e1), $(self.e2) eta: ($(self.eta1), $(self.eta2))"
+
+show(io::Base.IO, self::Shape) = print(io,string(self))
+show(self::Shape) = show(STDOUT, self)
+
+
+#
+# negation and identity
+#
+
 Base.(:-)(self::Shape) = ShapeG(-self.g1, -self.g2)
+Base.(:+)(self::Shape) = self
 
-# get a new shape, sheared by the specified amount
+#
+# shearing
+#
+
 function Base.(:+)(self::Shape, shear::Shape)
 
     g1,g2 = 0.0,0.0
@@ -161,6 +172,16 @@ function Base.(:+)(self::Shape, shear::Shape)
     Shape(g1, g2)
 end
 
+#
+# test for equality
+#
+
+isequal(s1::Shape, s2::Shape) = (s1.g1==s2.g1) && (s1.g2==s2.g2)
+
+#
+# simple test
+#
+
 function test(;shear1=-0.2, shear2=-0.1)
 
     s=Shape(0.2, 0.1)
@@ -179,6 +200,10 @@ function test(;shear1=-0.2, shear2=-0.1)
     newshape2 = s + shear2
     println("sheared: ", newshape2)
 
+
+    ssame = Shape(0.2, 0.1)
+    println("s==ssame:   ",s==ssame)
+    println("s==sheared: ",s==newshape)
 
 
 end
