@@ -74,8 +74,9 @@ function ShapeE(e1::MFloat, e2::MFloat)
 
     if e >= 1
         throw(DomainError("e >= 1: $(e)"))
-    else
+    end
 
+    if e != 0
         eta = atanh(e)
         g = tanh(eta/2)
 
@@ -105,10 +106,7 @@ function ShapeEta(eta1::MFloat, eta2::MFloat)
 
     eta=sqrt(eta1*eta1 + eta2*eta2)
 
-    if eta >= 1
-        throw(DomainError())
-    else
-
+    if eta != 0
         e=tanh(eta)
         g=tanh(eta/2.)
 
