@@ -1,16 +1,21 @@
 """
+uses immutable Gauss2D, but GMix is still mutable so
+    that it's vector of Gauss2D does not have to be
+    copied all the time
+
 Defines the following types
 
 SimplePars
 GMix
 
 """
-module gmix
+module igmix
 
 # will add methods to these
 import Base.length,
        Base.fill!,
        Base.getindex,
+       Base.setindex!,
        Base.string,
        Base.show,
        Base.start,
@@ -21,7 +26,7 @@ import Base.length,
 import mfloat.MFloat
 
 using shape
-using gauss2d
+using igauss2d
 using point2d
 using cov2d
 
@@ -86,6 +91,7 @@ end
 
 # getindex can also be used like gmix_pars[ind]
 getindex(self::SimplePars, ind::Int) = self.pars[ind]
+setindex!(self::SimplePars, val::MFloat, ind::Int) = self.pars[ind] = val
 length(self::SimplePars) = length(self.pars)
 
 function show(io::Base.IO, self::SimplePars)
@@ -106,20 +112,15 @@ type GMix
     data::Vector{Gauss2D}
 
     function GMix(num::Int) 
-        tmp = Array(Gauss2D, num)
-
-        for i=1:num
-            tmp[i] = Gauss2D()
-        end
-
+        tmp = ones(Gauss2D, num)
         new(tmp)
     end
-
 end
 
 # indexing and iteration
 # getindex can also be used like gmix[ind]
 getindex(self::GMix, ind::Int) = self.data[ind]
+setindex!(self::GMix, g::Gauss2D, ind::Int) = self.data[ind] = g
 length(self::GMix) = length(self.data)
 start(self::GMix) = start(self.data)
 next(self::GMix, i) = next(self.data,i)
@@ -128,8 +129,8 @@ done(self::GMix, i) = done(self.data,i)
 # stringify and showing
 function string(self::GMix)
     s=[]
-    for g in self
-        push!(s, string(g) )
+    for i=1:length(self)
+        push!(s, string(self[i]) )
     end
 
     join(s, " ")
@@ -140,26 +141,23 @@ end
 show(self::GMix) = show(STDOUT,self)
 
 # evaluation and properties
-function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
+function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0, max_chi2::MFloat=9.999e9)
     """
     Evaluate the gaussian mixture at the specified location
     """
     val::MFloat = 0.0
 
-    for g in self
+    for i=1:length(self)
 
-        cen = g.cen
-        cov = g.cov
+        xd = x-self[i].cen.x
+        yd = y-self[i].cen.y
 
-        xd = x-cen.x
-        yd = y-cen.y
+        chi2 = (      self[i].cov.dxx * yd^2
+                +     self[i].cov.dyy * xd^2
+                - 2.0*self[i].cov.dxy * xd*yd )
 
-        chi2 = (      cov.dxx * yd^2
-                +     cov.dyy * xd^2
-                - 2.0*cov.dxy * xd*yd )
-
-        if chi2 < MAX_CHI2
-            val += g.pnorm*exp( -0.5*chi2 )
+        if chi2 < max_chi2
+            val += self[i].pnorm*exp( -0.5*chi2 )
         end
 
     end
@@ -182,10 +180,10 @@ function get_cen(self::GMix)
     y::MFloat = 0
     psum::MFloat = 0
 
-    for g in self
-        psum += g.p
-        x += g.p*g.cen.x
-        y += g.p*g.cen.y
+    for i=1:length(self)
+        psum += self[i].p
+        x += self[i].p*self[i].cen.x
+        y += self[i].p*self[i].cen.y
     end
 
     x /= psum
@@ -206,9 +204,12 @@ function set_cen!(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
     x_shift = x-pt_cur.x
     y_shift = y-pt_cur.y
 
-    for g in self
-        g.x += x_shift
-        g.y += y_shift
+    pshift = Point2D(x=x_shift, y=y_shift)
+
+    for i=1:length(self)
+        newcen = self[i].cen + pshift
+
+        self[i] = Gauss2D(self[i].p, newcen, self[i].cov)
     end
 end
 
@@ -223,14 +224,14 @@ function get_T(self::GMix)
 
     cen = get_cen(self)
 
-    for g in self
-        psum += g.p
+    for i=1:length(self)
+        psum += self[i].p
 
-        xdiff = g.x - cen.x
-        ydiff = g.y - cen.y
+        xdiff = self[i].x - cen.x
+        ydiff = self[i].y - cen.y
 
-        ixx += g.p*(g.ixx + xdiff*xdiff)
-        iyy += g.p*(g.iyy + ydiff*ydiff)
+        ixx += self[i].p*(self[i].ixx + xdiff*xdiff)
+        iyy += self[i].p*(self[i].iyy + ydiff*ydiff)
 
     end
 
@@ -243,8 +244,8 @@ end
 function get_psum(self::GMix)
     psum::MFloat = 0
 
-    for g in self
-        psum += g.p
+    for i=1:length(self)
+        psum += self[i].p
     end
     psum
 end
@@ -252,8 +253,8 @@ function set_psum!(self::GMix, psum::MFloat)
     psum_cur = get_psum(self)
     rat = psum/psum_cur
 
-    for g in self
-        g.p *= rat
+    for i=1:length(self)
+        self[i] = Gauss2D(self[i].p*rat, self[i].cen, self[i].cov)
     end
 
     psum
@@ -290,14 +291,15 @@ function convolve_fill!(self::GMix, obj::GMix, psf::GMix)
     psf_cen = get_cen(psf)
 
     iself=1
-    for og in obj
-        for pg in psf
+    for oi=1:size(obj)
+        for pi=1:size(psf)
 
-            cen = og.cen + (pg.cen - psf_cen)
-            cov = og.cov + pg.cov
+            cen = obj[oi].cen + (psf[pi].cen - psf_cen)
+            cov = obj[oi].cov + psf[pi].cov
 
-            p = og.p*pg.p/psf_psum,
-            gauss2d.fill!(self[iself], p=p, cen=cen, cov=cov)
+            p = obj[oi].p*psf[pi].p/psf_psum
+
+            self[iself] = Gauss2D(p, cen, cov)
             iself += 1
         end
     end
@@ -415,7 +417,6 @@ function _fill_simple!(self::GMix,
     sh = Shape(g1, g2)
 
     for i=1:length(self)
-        gauss=self[i]
 
         T_i = T*fvals[i]
         flux_i=flux*pvals[i]
@@ -429,10 +430,7 @@ function _fill_simple!(self::GMix,
         cen = Point2D(x=x, y=y)
         cov = Cov2D(iyy=iyy, ixy=ixy, ixx=ixx)
 
-        gauss2d.fill!(gauss,
-                      p=flux_i,
-                      cen=cen,
-                      cov=cov)
+        self[i] = Gauss2D(flux_i, cen, cov)
 
     end
 end
@@ -524,6 +522,8 @@ function draw_image!(self::GMix, image::Array{MFloat,2})
     The mixture is *added* to the input image
 
     note column-major memory layout
+
+    Evaluations are not limited to a perticular small aperture
     """
 
     ny,nx = size(image)
@@ -541,11 +541,14 @@ end
 
 function get_loglike(self::GMix,
                      image::Array{MFloat,2},
-                     ivar::MFloat)
+                     weight::Array{MFloat,2};
+                     max_chi2::MFloat = MAX_CHI2)
     """
     Calculate the likelihood of the mixture
 
     note column-major memory layout
+
+    evaluations are limited to chi^2 < max_chi2
     """
 
                  
@@ -560,13 +563,17 @@ function get_loglike(self::GMix,
         for iy=1:ny
             y = convert(MFloat, iy)
 
-            model_val = gmix_eval(self, x=x, y=y)
-            pixval = image[iy,ix]
+            ivar = weight[iy,ix]
 
-            diff = model_val-pixval
-            loglike += diff*diff*ivar
-            s2n_numer += pixval*model_val*ivar
-            s2n_denom += model_val*model_val*ivar
+            if ivar > 0.0
+                model_val = gmix_eval(self, x=x, y=y, max_chi2=max_chi2)
+                pixval = image[iy,ix]
+
+                diff = model_val-pixval
+                loglike += diff*diff*ivar
+                s2n_numer += pixval*model_val*ivar
+                s2n_denom += model_val*model_val*ivar
+            end
         end
     end
 
@@ -603,6 +610,5 @@ function test_make_image(model; T=16.0, g1=0.1, g2=0.3, flux=100.0, show=false)
 
     image
 end
-
 
 end # module
