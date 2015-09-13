@@ -3,8 +3,8 @@ module gauss2
 import Base.string, Base.show, Base.IO, Base.one
 import mfloat.MFloat
 
-using point2d
-using cov2d
+using point2
+using cov2
 
 # export means it can be imported, which is about extending it
 # remember all the symbols are available to those that "use" the module
@@ -18,15 +18,15 @@ export Gauss2
 immutable Gauss2
     p::MFloat
 
-    cen::Point2D
-    cov::Cov2D
+    cen::Point2
+    cov::Cov2
 
     norm::MFloat # 1/( 2*pi*sqrt(cov.det) )
     pnorm::MFloat # p*norm
 
-    Gauss2() = Gauss2(1.0, Point2D(), Cov2D())
+    Gauss2() = Gauss2(1.0, Point2(), Cov2())
 
-    function Gauss2(p::MFloat, cen::Point2D, cov::Cov2D)
+    function Gauss2(p::MFloat, cen::Point2, cov::Cov2)
 
         norm = 1./(2*pi*sqrt(cov.det))
         pnorm = p*norm
@@ -45,7 +45,7 @@ show(io::Base.IO, self::Gauss2) = print(io,string(self))
 show(self::Gauss2) = show(STDOUT, self)
 
 
-function eval(self::Gauss2, pt::Point2D)
+function eval(self::Gauss2, pt::Point2)
     eval(self, x=pt.x, y=pt.y)
 end
 

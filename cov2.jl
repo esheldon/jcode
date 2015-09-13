@@ -1,18 +1,18 @@
 # symmetric 2d covariance matrix
 # the upcoming FixedSizeArray should replace this at some level
 
-module cov2d
+module cov2
 
 import Base.string, Base.show, Base.IO
 import mfloat.MFloat
 
-export Cov2D
+export Cov2
 
 #
-# Cov2D
+# Cov2
 #
 
-immutable Cov2D
+immutable Cov2
     ixx::MFloat
     ixy::MFloat
     iyy::MFloat
@@ -23,7 +23,7 @@ immutable Cov2D
     dxy::MFloat
     dyy::MFloat
 
-    function Cov2D(; ixx::MFloat=1.0,
+    function Cov2(; ixx::MFloat=1.0,
                      ixy::MFloat=0.0,
                      iyy::MFloat=1.0)
 
@@ -42,25 +42,25 @@ immutable Cov2D
 
 end
 
-Base.(:+)(cov1::Cov2D, cov2::Cov2D) = Cov2D(ixx=cov1.ixx+cov2.ixx,
+Base.(:+)(cov1::Cov2, cov2::Cov2) = Cov2(ixx=cov1.ixx+cov2.ixx,
                                             ixy=cov1.ixy+cov2.ixy,
                                             iyy=cov1.iyy+cov2.iyy)
 
-Base.(:-)(cov1::Cov2D, cov2::Cov2D) = Cov2D(ixx=cov1.ixx-cov2.ixx,
+Base.(:-)(cov1::Cov2, cov2::Cov2) = Cov2(ixx=cov1.ixx-cov2.ixx,
                                             ixy=cov1.ixy-cov2.ixy,
                                             iyy=cov1.iyy-cov2.iyy)
 
 
-string(self::Cov2D) = "ixx: $(self.ixx) ixy: $(self.ixy) iyy: $(self.iyy)"
+string(self::Cov2) = "ixx: $(self.ixx) ixy: $(self.ixy) iyy: $(self.iyy)"
 
-show(io::Base.IO, self::Cov2D) = print(io, string(self))
+show(io::Base.IO, self::Cov2) = print(io, string(self))
 
-show(self::Cov2D) = show(STDOUT, self)
+show(self::Cov2) = show(STDOUT, self)
 
 
 function test()
-     cov1=Cov2D(ixx=1.5, ixy=0.1, iyy=2.5)
-     cov2=Cov2D(ixx=1.0, ixy=0.1, iyy=1.0)
+     cov1=Cov2(ixx=1.5, ixy=0.1, iyy=2.5)
+     cov2=Cov2(ixx=1.0, ixy=0.1, iyy=1.0)
 
      println("cov1:",cov1)
      println("cov2:",cov2)

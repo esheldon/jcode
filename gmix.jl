@@ -9,7 +9,7 @@ SimplePars
 GMix
 
 """
-module igmix
+module gmix
 
 # will add methods to these
 import Base.length,
@@ -27,8 +27,8 @@ import mfloat.MFloat
 
 using shape
 using gauss2
-using point2d
-using cov2d
+using point2
+using cov2
 
 # export means it can be imported, which is about extending it
 # remember all the symbols are available to those that "use" the module
@@ -165,7 +165,7 @@ function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0, max_chi2::MFloat=9.
     val
 end
 
-function gmix_eval(self::GMix, pt::Point2D)
+function gmix_eval(self::GMix, pt::Point2)
     """
     Evaluate the gaussian mixture at the specified location
     """
@@ -189,10 +189,10 @@ function get_cen(self::GMix)
     x /= psum
     y /= psum
 
-    Point2D(x=x, y=y)
+    Point2(x=x, y=y)
 end
 
-function set_cen!(self::GMix, pt::Point2D)
+function set_cen!(self::GMix, pt::Point2)
     set_cen!(self, x=pt.x, y=pt.y)
 end
 
@@ -204,7 +204,7 @@ function set_cen!(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
     x_shift = x-pt_cur.x
     y_shift = y-pt_cur.y
 
-    pshift = Point2D(x=x_shift, y=y_shift)
+    pshift = Point2(x=x_shift, y=y_shift)
 
     for i=1:length(self)
         newcen = self[i].cen + pshift
@@ -427,8 +427,8 @@ function _fill_simple!(self::GMix,
         ixy=Thalf*sh.e2
         ixx=Thalf*(1+sh.e1)
 
-        cen = Point2D(x=x, y=y)
-        cov = Cov2D(iyy=iyy, ixy=ixy, ixx=ixx)
+        cen = Point2(x=x, y=y)
+        cov = Cov2(iyy=iyy, ixy=ixy, ixx=ixx)
 
         self[i] = Gauss2(flux_i, cen, cov)
 
