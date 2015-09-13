@@ -11,7 +11,7 @@ using mfloat
 
 export Shape
 
-type Shape
+immutable Shape
     g1::MFloat
     g2::MFloat
 
@@ -26,9 +26,34 @@ type Shape
 
     # default constructor is for g1,g2
     function Shape(g1::MFloat, g2::MFloat) 
-        self=Shape()
-        set_g!(self, g1, g2)
-        return self
+
+        e1::MFloat = 0.0
+        e2::MFloat = 0.0
+        eta1::MFloat = 0.0
+        eta2::MFloat = 0.0
+
+        g=sqrt(g1*g1 + g2*g2)
+
+        if g >= 1
+            throw(DomainError("g >= 1: $(g)"))
+        elseif g != 0
+            eta = 2*atanh(g)
+            e = tanh(eta)
+
+            if e >= 1
+                throw(DomainError("e >= 1: $(e)"))
+            end
+
+            cos2theta = g1/g
+            sin2theta = g2/g
+
+            e1=e*cos2theta
+            e2=e*sin2theta
+            eta1=eta*cos2theta
+            eta2=eta*sin2theta
+
+            new(g1,g2,e1,e2,eta1,eta2)
+        end
     end
 
 end
@@ -43,16 +68,71 @@ ShapeG(g1::MFloat, g2::MFloat) = Shape(g1,g2)
 
 # a new shape explicitly noting the use of e1,e2
 function ShapeE(e1::MFloat, e2::MFloat)
-    s=Shape()
-    set_e!(s, e1, e2)
-    return s
+    g1::MFloat=0.0
+    g2::MFloat=0.0
+    eta1::MFloat=0.0
+    eta2::MFloat=0.0
+
+    e=sqrt(e1*e1 + e2*e2)
+
+    if e >= 1
+        throw(DomainError("e >= 1: $(e)"))
+    else
+
+        eta = atanh(e)
+        g = tanh(eta/2)
+
+        if g >= 1
+            throw(DomainError("g >= 1: $(g)"))
+        end
+
+        cos2theta = e1/e
+        sin2theta = e2/e
+
+        g1=g*cos2theta
+        g2=g*sin2theta
+        eta1=eta*cos2theta
+        eta2=eta*sin2theta
+
+    end
+
+    Shape(g1,g2,e1,e2,eta1,eta2)
 end
 
 # a new shape explicitly noting the use of eta1,eta2
 function ShapeEta(eta1::MFloat, eta2::MFloat)
-    s=Shape()
-    set_eta!(s, eta1, eta2)
-    return s
+    g1::MFloat=0.0
+    g2::MFloat=0.0
+    e1::MFloat=0.0
+    e2::MFloat=0.0
+
+    eta=sqrt(eta1*eta1 + eta2*eta2)
+
+    if eta >= 1
+        throw(DomainError())
+    else
+
+        e=tanh(eta)
+        g=tanh(eta/2.)
+
+        if g >= 1
+            throw(DomainError("g >= 1: $(g)"))
+        end
+        if e >= 1
+            throw(DomainError("e >= 1: $(e)"))
+        end
+
+        cos2theta = eta1/eta
+        sin2theta = eta2/eta
+
+        g1=g*cos2theta
+        g2=g*sin2theta
+        e1=e*cos2theta
+        e2=e*sin2theta
+
+    end
+
+    Shape(g1,g2,e1,e2,eta1,eta2)
 end
 
 
@@ -80,8 +160,7 @@ function shear(self::Shape, sh::Shape)
         set_g!( out, g1o, g2o )
     end
 
-    return out
-
+    out
 end
 
 # this version uses the distortion formula
@@ -105,8 +184,7 @@ function shear_dist(self::Shape, sh::Shape)
         set_e!(new_shape, e1, e2)
     end
 
-    return new_shape
-
+    new_shape
 end
 
 

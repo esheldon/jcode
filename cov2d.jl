@@ -12,7 +12,7 @@ export Cov2D
 # Cov2D
 #
 
-type Cov2D
+immutable Cov2D
     ixx::MFloat
     ixy::MFloat
     iyy::MFloat

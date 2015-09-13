@@ -9,7 +9,7 @@ export Point2D
 # Point2D
 #
 
-type Point2D
+immutable Point2D
     x::MFloat
     y::MFloat
 
