@@ -36,7 +36,9 @@ immutable Shape
 
         if g >= 1
             throw(DomainError("g >= 1: $(g)"))
-        elseif g != 0
+        end
+
+        if g != 0
             eta = 2*atanh(g)
             e = tanh(eta)
 
@@ -52,8 +54,8 @@ immutable Shape
             eta1=eta*cos2theta
             eta2=eta*sin2theta
 
-            new(g1,g2,e1,e2,eta1,eta2)
         end
+        new(g1,g2,e1,e2,eta1,eta2)
     end
 
 end
@@ -140,33 +142,30 @@ end
 Base.(:-)(self::Shape) = ShapeG(-self.g1, -self.g2)
 
 # get a new shape, sheared by the specified amount
-function shear(self::Shape, sh::Shape)
+function Base.(:+)(self::Shape, shear::Shape)
 
-    # zeros
-    out = Shape()
+    g1,g2 = 0.0,0.0
 
-    A = 1 + self.g1*sh.g1 + self.g2*sh.g2
-    B = self.g2*sh.g1 - self.g1*sh.g2
-    denom_inv = 1./(A*A + B*B)
+    if shear.g1 != 0 || shear.g2 != 0
+        A = 1 + self.g1*shear.g1 + self.g2*shear.g2
+        B = self.g2*shear.g1 - self.g1*shear.g2
+        denom_inv = 1./(A*A + B*B)
 
-    if sh.g1 != 0 || sh.g2 != 0
+        g1 = A*(self.g1 + shear.g1) + B*(self.g2 + shear.g2)
+        g2 = A*(self.g2 + shear.g2) - B*(self.g1 + shear.g1)
 
-        g1o = A*(self.g1 + sh.g1) + B*(self.g2 + sh.g2)
-        g2o = A*(self.g2 + sh.g2) - B*(self.g1 + sh.g1)
-
-        g1o *= denom_inv
-        g2o *= denom_inv
-
-        set_g!( out, g1o, g2o )
+        g1 *= denom_inv
+        g2 *= denom_inv
     end
 
-    out
+    println("g1,g2: ($(g1),$(g2))")
+    Shape(g1, g2)
 end
 
 # this version uses the distortion formula
 function shear_dist(self::Shape, sh::Shape)
 
-    new_shape = Shape()
+    e1, e2 = 0.0, 0.0
 
     oneplusedot = 1.0 + self.e1*sh.e1 + self.e2*sh.e2
 
@@ -180,131 +179,22 @@ function shear_dist(self::Shape, sh::Shape)
 
         e1 /= oneplusedot
         e2 /= oneplusedot
-
-        set_e!(new_shape, e1, e2)
     end
 
-    new_shape
+    ShapeE(e1,e2)
 end
 
+function test(;s1=-0.2, s2=-0.1)
 
-# set the shape given g1,g2 keeping e and eta consistent
-function set_g!(self::Shape, g1::MFloat, g2::MFloat)
+    s=Shape(0.2, 0.1)
+    println("shape: ",s)
 
-    self.g1=g1
-    self.g2=g2
+    shear = Shape(s1, s2)
+    println("shear: ",shear)
 
-    g=sqrt(g1*g1 + g2*g2)
+    newshape = s + shear
+    println("sheared: ", newshape)
 
-    if g >= 1
-        throw(DomainError("g >= 1: $(g)"))
-    elseif g==0
-        self.e1=0
-        self.e2=0
-        self.eta1=0
-        self.eta2=0
-    else
-        eta = 2*atanh(g)
-        e = tanh(eta)
-
-        if e >= 1
-            throw(DomainError())
-        end
-
-        cos2theta = g1/g
-        sin2theta = g2/g
-
-        self.e1=e*cos2theta
-        self.e2=e*sin2theta
-        self.eta1=eta*cos2theta
-        self.eta2=eta*sin2theta
-
-    end
-
-    return self
-end
-
-# set the shape given e1,e2 keeping g and eta consistent
-function set_e!(self::Shape, e1::MFloat, e2::MFloat)
-
-    self.e1=e1
-    self.e2=e2
-
-    e=sqrt(e1*e1 + e2*e2)
-
-    if e >= 1
-        throw(DomainError())
-    elseif e==0
-        self.g1=0
-        self.g2=0
-        self.eta1=0
-        self.eta2=0
-    else
-
-        eta = atanh(e)
-        g = tanh(eta/2)
-
-        if g >= 1
-            throw(DomainError())
-        end
-
-        cos2theta = e1/e
-        sin2theta = e2/e
-
-        self.g1=g*cos2theta
-        self.g2=g*sin2theta
-        self.eta1=eta*cos2theta
-        self.eta2=eta*sin2theta
-
-    end
-
-    return self
-end
-
-# set the shape given eta1,eta2 keeping g and e consistent
-function set_eta!(self::Shape, eta1::MFloat, eta2::MFloat)
-
-    self.eta1=eta1
-    self.eta2=eta2
-
-    eta=sqrt(eta1*eta1 + eta2*eta2)
-
-    if eta >= 1
-        throw(DomainError())
-    elseif eta==0
-        self.g1=0
-        self.g2=0
-        self.e1=0
-        self.e2=0
-    else
-
-        e=tanh(eta)
-        g=tanh(eta/2.)
-
-        if g >= 1
-            throw(DomainError())
-        end
-        if e >= 1
-            throw(DomainError())
-        end
-
-        cos2theta = eta1/eta
-        sin2theta = eta2/eta
-
-        self.g1=g*cos2theta
-        self.g2=g*sin2theta
-        self.e1=e*cos2theta
-        self.e2=e*sin2theta
-
-    end
-
-    return self
-end
-
-function test()
-
-    s=Shape(0.2, 0.3)
-    println(s)
 
 end
 
