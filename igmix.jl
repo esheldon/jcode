@@ -129,7 +129,7 @@ done(self::GMix, i) = done(self.data,i)
 # stringify and showing
 function string(self::GMix)
     s=[]
-    for i=1:size(self)
+    for i=1:length(self)
         push!(s, string(self[i]) )
     end
 
@@ -141,24 +141,22 @@ end
 show(self::GMix) = show(STDOUT,self)
 
 # evaluation and properties
-function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
+function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0, max_chi2::MFloat=9.999e9)
     """
     Evaluate the gaussian mixture at the specified location
     """
     val::MFloat = 0.0
 
-    for i=1:size(self)
-        cen = self[i].cen
-        cov = self[i].cov
+    for i=1:length(self)
 
-        xd = x-cen.x
-        yd = y-cen.y
+        xd = x-self[i].cen.x
+        yd = y-self[i].cen.y
 
-        chi2 = (      cov.dxx * yd^2
-                +     cov.dyy * xd^2
-                - 2.0*cov.dxy * xd*yd )
+        chi2 = (      self[i].cov.dxx * yd^2
+                +     self[i].cov.dyy * xd^2
+                - 2.0*self[i].cov.dxy * xd*yd )
 
-        if chi2 < MAX_CHI2
+        if chi2 < max_chi2
             val += self[i].pnorm*exp( -0.5*chi2 )
         end
 
@@ -182,7 +180,7 @@ function get_cen(self::GMix)
     y::MFloat = 0
     psum::MFloat = 0
 
-    for i=1:size(self)
+    for i=1:length(self)
         psum += self[i].p
         x += self[i].p*self[i].cen.x
         y += self[i].p*self[i].cen.y
@@ -208,7 +206,7 @@ function set_cen!(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
 
     pshift = Point2D(x=x_shift, y=y_shift)
 
-    for i=1:size(self)
+    for i=1:length(self)
         newcen = self[i].cen + pshift
 
         self[i] = Gauss2D(self[i].p, newcen, self[i].cov)
@@ -226,7 +224,7 @@ function get_T(self::GMix)
 
     cen = get_cen(self)
 
-    for i=1:size(self)
+    for i=1:length(self)
         psum += self[i].p
 
         xdiff = self[i].x - cen.x
@@ -246,7 +244,7 @@ end
 function get_psum(self::GMix)
     psum::MFloat = 0
 
-    for i=1:size(self)
+    for i=1:length(self)
         psum += self[i].p
     end
     psum
@@ -255,7 +253,7 @@ function set_psum!(self::GMix, psum::MFloat)
     psum_cur = get_psum(self)
     rat = psum/psum_cur
 
-    for i=1:size(self)
+    for i=1:length(self)
         self[i] = Gauss2D(self[i].p*rat, self[i].cen, self[i].cov)
     end
 
@@ -524,6 +522,8 @@ function draw_image!(self::GMix, image::Array{MFloat,2})
     The mixture is *added* to the input image
 
     note column-major memory layout
+
+    Evaluations are not limited to a perticular small aperture
     """
 
     ny,nx = size(image)
@@ -541,11 +541,14 @@ end
 
 function get_loglike(self::GMix,
                      image::Array{MFloat,2},
-                     ivar::MFloat)
+                     weight::Array{MFloat,2};
+                     max_chi2::MFloat = MAX_CHI2)
     """
     Calculate the likelihood of the mixture
 
     note column-major memory layout
+
+    evaluations are limited to chi^2 < max_chi2
     """
 
                  
@@ -560,18 +563,52 @@ function get_loglike(self::GMix,
         for iy=1:ny
             y = convert(MFloat, iy)
 
-            model_val = gmix_eval(self, x=x, y=y)
-            pixval = image[iy,ix]
+            ivar = weight[iy,ix]
 
-            diff = model_val-pixval
-            loglike += diff*diff*ivar
-            s2n_numer += pixval*model_val*ivar
-            s2n_denom += model_val*model_val*ivar
+            if ivar > 0.0
+                model_val = gmix_eval(self, x=x, y=y, max_chi2=max_chi2)
+                pixval = image[iy,ix]
+
+                diff = model_val-pixval
+                loglike += diff*diff*ivar
+                s2n_numer += pixval*model_val*ivar
+                s2n_denom += model_val*model_val*ivar
+            end
         end
     end
 
     loglike *= (-0.5)
     return loglike, s2n_numer, s2n_denom
+end
+
+function test_make_simple(model; T=16.0, g1=0.1, g2=0.3, flux=100.0)
+
+    sigma=sqrt(T/2.0)
+    dim=ceil(Int, 2.0*5.0*sigma)
+
+    dims = (dim,dim)
+
+    c1 = dim/2.0 + 0.01*rand()
+    c2 = dim/2.0 + 0.01*rand()
+    pars = [c1, c2, g1, g2, T, flux]
+
+    gm = make_simple(model, pars)
+
+    gm
+end
+
+function test_make_image(model; T=16.0, g1=0.1, g2=0.3, flux=100.0, show=false)
+
+    gm = test_make_simple(model, T=T, g1=g1, g2=g2, flux=flux)
+
+    sigma=sqrt(T/2.0)
+    dim=ceil(Int, 2.0*5.0*sigma)
+
+    dims = (dim,dim)
+
+    image = make_image(gm, dims)
+
+    image
 end
 
 end # module

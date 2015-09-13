@@ -27,4 +27,5 @@ function test_render(model; T=16.0, g1=0.1, g2=0.3, flux=100.0, show=false)
         #junk = readline(STDIN)
     end
 
+    im
 end

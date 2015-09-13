@@ -574,4 +574,35 @@ function get_loglike(self::GMix,
     return loglike, s2n_numer, s2n_denom
 end
 
+function test_make_simple(model; T=16.0, g1=0.1, g2=0.3, flux=100.0)
+
+    sigma=sqrt(T/2.0)
+    dim=ceil(Int, 2.0*5.0*sigma)
+
+    dims = (dim,dim)
+
+    c1 = dim/2.0 + 0.01*rand()
+    c2 = dim/2.0 + 0.01*rand()
+    pars = [c1, c2, g1, g2, T, flux]
+
+    gm = make_simple(model, pars)
+
+    gm
+end
+
+function test_make_image(model; T=16.0, g1=0.1, g2=0.3, flux=100.0, show=false)
+
+    gm = test_make_simple(model, T=T, g1=g1, g2=g2, flux=flux)
+
+    sigma=sqrt(T/2.0)
+    dim=ceil(Int, 2.0*5.0*sigma)
+
+    dims = (dim,dim)
+
+    image = make_image(gm, dims)
+
+    image
+end
+
+
 end # module
