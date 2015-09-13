@@ -158,42 +158,27 @@ function Base.(:+)(self::Shape, shear::Shape)
         g2 *= denom_inv
     end
 
-    println("g1,g2: ($(g1),$(g2))")
     Shape(g1, g2)
 end
 
-# this version uses the distortion formula
-function shear_dist(self::Shape, sh::Shape)
-
-    e1, e2 = 0.0, 0.0
-
-    oneplusedot = 1.0 + self.e1*sh.e1 + self.e2*sh.e2
-
-    if (sh.e1 != 0 || sh.e2 != 0) && (oneplusedot != 0)
-        esq = sh.e1^2 + sh.e2^2
-
-        fac = (1.0 - sqrt(1.0-esq))/esq
-
-        e1 = self.e1 + sh.e1 + sh.e2*fac*(self.e2*sh.e1 - self.e1*sh.e2)
-        e2 = self.e2 + sh.e2 + sh.e1*fac*(self.e1*sh.e2 - self.e2*sh.e1)
-
-        e1 /= oneplusedot
-        e2 /= oneplusedot
-    end
-
-    ShapeE(e1,e2)
-end
-
-function test(;s1=-0.2, s2=-0.1)
+function test(;shear1=-0.2, shear2=-0.1)
 
     s=Shape(0.2, 0.1)
     println("shape: ",s)
 
-    shear = Shape(s1, s2)
+    shear = Shape(shear1, shear2)
     println("shear: ",shear)
 
     newshape = s + shear
     println("sheared: ", newshape)
+
+    println()
+    shear2 = Shape(0.05, 0.05)
+    println("shear2: ",shear2)
+
+    newshape2 = s + shear2
+    println("sheared: ", newshape2)
+
 
 
 end
