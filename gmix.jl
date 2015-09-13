@@ -1,6 +1,6 @@
 """
-uses immutable Gauss2D, but GMix is still mutable so
-    that it's vector of Gauss2D does not have to be
+uses immutable Gauss2, but GMix is still mutable so
+    that it's vector of Gauss2 does not have to be
     copied all the time
 
 Defines the following types
@@ -26,7 +26,7 @@ import Base.length,
 import mfloat.MFloat
 
 using shape
-using igauss2d
+using gauss2
 using point2d
 using cov2d
 
@@ -109,10 +109,10 @@ show(self::SimplePars) = show(STDOUT, self)
 #
 
 type GMix
-    data::Vector{Gauss2D}
+    data::Vector{Gauss2}
 
     function GMix(num::Int) 
-        tmp = ones(Gauss2D, num)
+        tmp = ones(Gauss2, num)
         new(tmp)
     end
 end
@@ -120,7 +120,7 @@ end
 # indexing and iteration
 # getindex can also be used like gmix[ind]
 getindex(self::GMix, ind::Int) = self.data[ind]
-setindex!(self::GMix, g::Gauss2D, ind::Int) = self.data[ind] = g
+setindex!(self::GMix, g::Gauss2, ind::Int) = self.data[ind] = g
 length(self::GMix) = length(self.data)
 start(self::GMix) = start(self.data)
 next(self::GMix, i) = next(self.data,i)
@@ -209,7 +209,7 @@ function set_cen!(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
     for i=1:length(self)
         newcen = self[i].cen + pshift
 
-        self[i] = Gauss2D(self[i].p, newcen, self[i].cov)
+        self[i] = Gauss2(self[i].p, newcen, self[i].cov)
     end
 end
 
@@ -254,7 +254,7 @@ function set_psum!(self::GMix, psum::MFloat)
     rat = psum/psum_cur
 
     for i=1:length(self)
-        self[i] = Gauss2D(self[i].p*rat, self[i].cen, self[i].cov)
+        self[i] = Gauss2(self[i].p*rat, self[i].cen, self[i].cov)
     end
 
     psum
@@ -299,7 +299,7 @@ function convolve_fill!(self::GMix, obj::GMix, psf::GMix)
 
             p = obj[oi].p*psf[pi].p/psf_psum
 
-            self[iself] = Gauss2D(p, cen, cov)
+            self[iself] = Gauss2(p, cen, cov)
             iself += 1
         end
     end
@@ -430,7 +430,7 @@ function _fill_simple!(self::GMix,
         cen = Point2D(x=x, y=y)
         cov = Cov2D(iyy=iyy, ixy=ixy, ixx=ixx)
 
-        self[i] = Gauss2D(flux_i, cen, cov)
+        self[i] = Gauss2(flux_i, cen, cov)
 
     end
 end
