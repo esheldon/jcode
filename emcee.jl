@@ -7,6 +7,15 @@ example
 
     using emcee
     sampler=Sampler(nwalkers, ndim, lnprob_func, x, y, yerr)
+
+    nwalkers=100
+    pstart=zeros(nwalkers, ndim)
+
+    # .. fill in your starting points
+
+    burnin=1000
+    nstep=1000
+
     plast,lnplast = sample!(sampler, pstart, burnin)
     p,lnp = sample!(sampler, plast, nstep, lnprob=lnplast)
 
