@@ -145,6 +145,15 @@ parameters
 returns
 -------
 - gm::`GMix`  The gaussian mixture
+
+
+Alternatively, call as make_simple(model, pars)
+
+- model::`model indicator` e.g. gmix.EXP or "exp"
+- pars::`sequence` Should be convertable to a Vector{Mfloat}.  The
+ layout is [ceny, cenx, g1, g2, T, flux].  The y comes first for
+consistency with 2-dimensionl arrays, which are accessed
+as image[y, x]
 """
 
 function make_simple(pars::SimplePars)
@@ -156,15 +165,6 @@ function make_simple(pars::SimplePars)
     return self
 end
 
-"""
-Alternatively, call as make_simple(model, pars)
-----------
-- model::`model indicator` e.g. gmix.EXP or "exp"
-- pars::`sequence` Should be convertable to a Vector{Mfloat}.  The
-  layout is [ceny, cenx, g1, g2, T, flux].  The y comes first for
-      consistency with 2-dimensionl arrays, which are accessed
-      as image[y, x]
-"""
 function make_simple(model, pars)
     gp = SimplePars(model, pars)
     return make_simple(gp)
@@ -232,6 +232,11 @@ evaluate.  Zero is returned for larger values.
 returns
 ------------
 - val::`MFloat` The value
+
+
+Alternatively, can be called as val=gmix_eval(gmix,pt) instead of x=, y=
+
+- pt::`Point2` The position at which to evaluate, as a `Point2` object
 """
 function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0, max_chi2::MFloat=9.999e9)
     val::MFloat = 0.0
@@ -254,11 +259,6 @@ function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0, max_chi2::MFloat=9.
     val
 end
 
-"""
-Alternatively, can be called as val=gmix_eval(gmix,pt) instead of x=, y=
-
-- pt::`Point2` The position at which to evaluate, as a `Point2` object
-"""
 function gmix_eval(self::GMix, pt::Point2, max_chi2::MFloat=9.999e9)
     gmix_eval(self, x=pt.x, y=pt.y, max_chi2=max_chi2)
 end
