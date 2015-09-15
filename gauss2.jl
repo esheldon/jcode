@@ -6,14 +6,7 @@ import mfloat.MFloat
 using point2
 using cov2
 
-# export means it can be imported, which is about extending it
-# remember all the symbols are available to those that "use" the module
-
 export Gauss2
-
-#
-# Gauss2
-#
 
 """
 Gauss2(p, cen, cov)
