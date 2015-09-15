@@ -50,25 +50,24 @@ const MAX_CHI2 = 25.0
 typealias GMixModel Int
 
 """
-SimplePars
+pars=SimplePars(model, pars)
 
-hold the parameters for a gaussian mixture model.  Basically just
-wraps a vector and verifies against the model types
+Constructor for SimplePars
+
+parameters
+----------
+- model::`string` or `number`  e.g. "exp" or gmix.EXP
+- pars::`sequence` Should be convertable to a Vector{Mfloat}.
+
+    The layout is [ceny, cenx, g1, g2, T, flux].  The y comes first for
+        consistency with 2-dimensionl arrays, which are accessed as image[y, x]
+
 """
 type SimplePars
     model::GMixModel
     model_name::String
     pars::Vector{MFloat}
 
-    """
-    pars=SimplePars(model, pars)
-    
-    Constructor for SimplePars
-
-    parameters
-    ----------
-    model::`string` or `number`  e.g. "exp" or gmix.EXP
-    """
     function SimplePars(model, parsin)
 
         if !(model in keys(SIMPLE_MODEL_NAMES))
@@ -112,17 +111,14 @@ show(self::SimplePars) = show(STDOUT, self)
 #
 
 """
-A gaussian mixture.
-
-Wraps a vector of Gauss2
-
-Constructors
-------------
-
 gm=GMix(num)
 
-- num::`Int` Number of gaussianx in mixture
+A gaussian mixture.  Wraps a vector of Gauss2.  You
+can construct specific models using gmix.make_simple
 
+parameters
+----------
+- num::`Int` Number of gaussians in mixture
 """
 type GMix
     data::Vector{Gauss2}
@@ -132,6 +128,69 @@ type GMix
         new(tmp)
     end
 end
+
+#
+# creating models
+#
+
+"""
+gm=make_simple(spars)
+
+make a gmix model
+
+parameters
+----------
+- pars::`SimplePars` A full SimplePars instance
+
+returns
+-------
+- gm::`GMix`  The gaussian mixture
+"""
+
+function make_simple(pars::SimplePars)
+    ngauss=GMIX_SIMPLE_NGAUSS[pars.model]
+    self=GMix(ngauss)
+
+    fill_simple!(self, pars)
+
+    return self
+end
+
+"""
+Alternatively, call as make_simple(model, pars)
+----------
+- model::`model indicator` e.g. gmix.EXP or "exp"
+- pars::`sequence` Should be convertable to a Vector{Mfloat}.  The
+  layout is [ceny, cenx, g1, g2, T, flux].  The y comes first for
+      consistency with 2-dimensionl arrays, which are accessed
+      as image[y, x]
+"""
+function make_simple(model, pars)
+    gp = SimplePars(model, pars)
+    return make_simple(gp)
+end
+
+"""
+fill_simple!(self, pars)
+
+Fill an existing GMix object from parameters
+
+parameters
+----------
+- self::`GMix` The gaussian mixture to fill
+- pars::`SimplePars` The full SimplePars object
+"""
+function fill_simple!(self::GMix, pars::SimplePars)
+    if pars.model==EXP
+        _fill_exp!(self, pars)
+    elseif pars.model==GAUSS
+        _fill_gauss!(self, pars)
+    else
+        throw(error("fill_simple does not yet support $(pars.model)"))
+    end
+end
+
+
 
 # indexing and iteration
 # getindex can also be used like gmix[ind]
@@ -165,14 +224,14 @@ Evaluate the gaussian mixture at the specified location
 parameters
 ----------
 - self::`GMix` A gaussian mixture
-- x::`float` **keyword** The x position at which to evaluate
-- y::`float` **keyword** The y position at which to evaluate
-- max_chi2::`float`  **keyword, optional** The maximum chi^2 at which to 
+- x::`MFloat` **keyword** The x position at which to evaluate
+- y::`MFloat` **keyword** The y position at which to evaluate
+- max_chi2::`MFloat`  **keyword, optional** The maximum chi^2 at which to 
 evaluate.  Zero is returned for larger values.
 
 returns
 ------------
-- val::`float` The value
+- val::`MFloat` The value
 """
 function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0, max_chi2::MFloat=9.999e9)
     val::MFloat = 0.0
@@ -271,7 +330,7 @@ parameters
 
 returns
 --------
-- T::`float` T=Ixx + Iyy
+- T::`MFloat` T=Ixx + Iyy
 """
 function get_T(self::GMix)
     psum::MFloat = 0
@@ -309,7 +368,7 @@ parameters
 
 returns
 --------
-- p::`float` The total flux
+- p::`MFloat` The total flux
 """
 function get_psum(self::GMix)
 
@@ -329,11 +388,11 @@ Set the total flux "psum"
 parameters
 ----------
 - gmix::`GMix` The gaussian mixture
-- psum::`float` The flux to set
+- psum::`MFloat` The flux to set
 
 returns
 --------
-- flux::`float` The new flux
+- flux::`MFloat` The new flux
 """
 function set_psum!(self::GMix, psum::MFloat)
     psum_cur = get_psum(self)
@@ -414,68 +473,120 @@ function convolve_inplace!(self::GMix, obj::GMix, psf::GMix)
     end
 end
 
-
-
 #
-# creating models
+# rendering the mixture into an image
 #
 
 """
-gm=make_simple(spars)
+im=make_image(gmix, dims)
 
-make a gmix model
+Make a new image, filled with a rendering of the mixture
 
 parameters
 ----------
-- pars::`SimplePars` A full SimplePars instance
+- self::`GMix` The gaussian mixture
+- dims::`sequence` dimensions of the image
 
 returns
 -------
-- gm::`GMix`  The gaussian mixture
+- image::`Array{MFloat,2}`  Tne new image
 """
-
-function make_simple(pars::SimplePars)
-    ngauss=GMIX_SIMPLE_NGAUSS[pars.model]
-    self=GMix(ngauss)
-
-    fill_simple!(self, pars)
-
-    return self
+function make_image(self::GMix, dims)
+    im=zeros(MFloat,dims)
+    draw_image!(self, im)
+    im
 end
 
 """
-Alternatively, call as make_simple(model, pars)
-----------
-- model::`model indicator` e.g. gmix.EXP or "exp"
-- pars::`Array` e.g. [cen1,cen2,g1,g2,T,flux]
-"""
-function make_simple(model, pars)
-    gp = SimplePars(model, pars)
-    return make_simple(gp)
-end
+draw_image!(gmix, image)
 
-
-"""
-fill_simple!(self, pars)
-
-Fill an existing GMix object from parameters
+Draw the gaussian mixture into the image.  The mixture is *added* to the input
+image
 
 parameters
 ----------
-- self::`GMix` The gaussian mixture to fill
-- pars::`SimplePars` The full SimplePars object
+- self::`GMix` The gaussian mixture
+- image::`Array{MFloat,2}` The image
 """
-function fill_simple!(self::GMix, pars::SimplePars)
-    if pars.model==EXP
-        fill_exp!(self, pars)
-    elseif pars.model==GAUSS
-        fill_gauss!(self, pars)
-    else
-        throw(error("fill_simple does not yet support $(pars.model)"))
+function draw_image!(self::GMix, image::Array{MFloat,2})
+    ny,nx = size(image)
+    for ix=1:nx
+        x = convert(MFloat, ix)
+
+        for iy=1:ny
+            y = convert(MFloat, iy)
+
+            image[iy,ix] += gmix_eval(self, x=x, y=y)
+        end
     end
 end
 
-function fill_exp!(self::GMix, pars::SimplePars)
+"""
+loglike,s2n_num,s2n_denom = get_loglike(gmix, image, weight, max_chi2=)
+
+Calculate the likelihood of the mixture for the input image
+
+parameters
+----------
+- self::`GMix` The gaussian mixture
+- image::`Array{MFloat,2}` The image
+- weight::`Array{MFloat,2}` The weight map
+- max_chi2::`Array{MFloat,2}` **keyword**  The maximum chi^2
+  at which to evaluate the exponential for each gaussian. Default
+      is given as gmix.MAX_CHI2
+
+returns
+-------
+(loglike,s2n_num,s2n_denom)
+where
+
+- loglike::`MFloat` The log likelihood
+- s2n_num::`MFloat` sum(image*model*weight)
+- s2n_denom::`MFloat` sum(model^2*weight)
+
+the s/n can be calculated with s2n_num/sqrt(s2n_denom)
+"""
+
+function get_loglike(self::GMix,
+                     image::Array{MFloat,2},
+                     weight::Array{MFloat,2};
+                     max_chi2::MFloat = MAX_CHI2)
+                 
+    loglike::MFloat = 0.0
+    s2n_numer::MFloat = 0.0
+    s2n_denom::MFloat = 0.0
+
+    ny,nx = size(image)
+
+    for ix=1:nx
+        x = convert(MFloat, ix)
+        for iy=1:ny
+            y = convert(MFloat, iy)
+
+            ivar = weight[iy,ix]
+
+            if ivar > 0.0
+                model_val = gmix_eval(self, x=x, y=y, max_chi2=max_chi2)
+                pixval = image[iy,ix]
+
+                diff = model_val-pixval
+                loglike += diff*diff*ivar
+                s2n_numer += pixval*model_val*ivar
+                s2n_denom += model_val*model_val*ivar
+            end
+        end
+    end
+
+    loglike *= (-0.5)
+    return loglike, s2n_numer, s2n_denom
+end
+
+
+#
+# utility functions and data
+#
+
+function _fill_exp!(self::GMix, pars::SimplePars)
     const ngauss_expected=6
 
     if pars.model != EXP
@@ -489,7 +600,7 @@ function fill_exp!(self::GMix, pars::SimplePars)
 end
 
 
-function fill_gauss!(self::GMix, pars::SimplePars)
+function _fill_gauss!(self::GMix, pars::SimplePars)
     const ngauss_expected=1
 
     if pars.model != GAUSS
@@ -503,15 +614,10 @@ function fill_gauss!(self::GMix, pars::SimplePars)
 end
 
 
-
 function _fill_simple!(self::GMix,
                        pars::SimplePars,
                        fvals::Vector{MFloat},
                        pvals::Vector{MFloat})
-    """
-    fill the gaussian mixture with the input parameters.
-    """
-
     # error checking
     npars=length(pars)
     if npars != 6
@@ -621,85 +727,6 @@ const FVALS_GAUSS = MFloat[1.0]
 const PVALS_GAUSS = MFloat[1.0]
 
 
-#
-# rendering the mixture into an image
-#
-
-"""
-im=make_image(gmix, dims)
-
-Make a new image, filled with a rendering of the mixture
-
-"""
-function make_image(self::GMix, dims)
-    im=zeros(MFloat,dims)
-    draw_image!(self, im)
-    im
-end
-
-function draw_image!(self::GMix, image::Array{MFloat,2})
-    """
-    The mixture is *added* to the input image
-
-    note column-major memory layout
-
-    Evaluations are not limited to a perticular small aperture
-    """
-
-    ny,nx = size(image)
-    for ix=1:nx
-        x = convert(MFloat, ix)
-
-        for iy=1:ny
-            y = convert(MFloat, iy)
-
-            image[iy,ix] += gmix_eval(self, x=x, y=y)
-        end
-    end
-end
-
-
-function get_loglike(self::GMix,
-                     image::Array{MFloat,2},
-                     weight::Array{MFloat,2};
-                     max_chi2::MFloat = MAX_CHI2)
-    """
-    Calculate the likelihood of the mixture
-
-    note column-major memory layout
-
-    evaluations are limited to chi^2 < max_chi2
-    """
-
-                 
-    loglike::MFloat = 0.0
-    s2n_numer::MFloat = 0.0
-    s2n_denom::MFloat = 0.0
-
-    ny,nx = size(image)
-
-    for ix=1:nx
-        x = convert(MFloat, ix)
-        for iy=1:ny
-            y = convert(MFloat, iy)
-
-            ivar = weight[iy,ix]
-
-            if ivar > 0.0
-                model_val = gmix_eval(self, x=x, y=y, max_chi2=max_chi2)
-                pixval = image[iy,ix]
-
-                diff = model_val-pixval
-                loglike += diff*diff*ivar
-                s2n_numer += pixval*model_val*ivar
-                s2n_denom += model_val*model_val*ivar
-            end
-        end
-    end
-
-    loglike *= (-0.5)
-    return loglike, s2n_numer, s2n_denom
-end
 
 function test_make_simple(model; T=16.0, g1=0.1, g2=0.3, flux=100.0)
 

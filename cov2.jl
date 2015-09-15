@@ -12,6 +12,28 @@ export Cov2
 # Cov2
 #
 
+"""
+Cov2(ixx=, ixy=, iyy=)
+
+Object representing a 2-d covariance matrix
+
+parameters
+----------
+ixx::`Mfloat` **keyword**
+ixy::`Mfloat` **keyword**
+iyy::`Mfloat` **keyword**
+
+operations
+----------
+
+The + and - operators work as expected, so you can translate points, e.g.
+
+    -cov         Negate the values in the cov
+    +cov         Just gets a copy of the cov
+    cov1 + cov2  Add two covariances to get a new one
+    cov1 - cov2  Subtract two covariances to get a new one
+
+"""
 immutable Cov2
     ixx::MFloat
     ixy::MFloat
@@ -24,8 +46,8 @@ immutable Cov2
     dyy::MFloat
 
     function Cov2(; ixx::MFloat=1.0,
-                     ixy::MFloat=0.0,
-                     iyy::MFloat=1.0)
+                    ixy::MFloat=0.0,
+                    iyy::MFloat=1.0)
 
         det = ixx*iyy - ixy^2
         if det <= 0.0
@@ -42,13 +64,18 @@ immutable Cov2
 
 end
 
+Base.(:-)(self::Cov2) = Cov2(ixx=-self.ixx,
+                             ixy=-self.ixy,
+                             iyy=-self.iyy)
+Base.(:+)(self::Cov2) = self
+
 Base.(:+)(cov1::Cov2, cov2::Cov2) = Cov2(ixx=cov1.ixx+cov2.ixx,
-                                            ixy=cov1.ixy+cov2.ixy,
-                                            iyy=cov1.iyy+cov2.iyy)
+                                         ixy=cov1.ixy+cov2.ixy,
+                                         iyy=cov1.iyy+cov2.iyy)
 
 Base.(:-)(cov1::Cov2, cov2::Cov2) = Cov2(ixx=cov1.ixx-cov2.ixx,
-                                            ixy=cov1.ixy-cov2.ixy,
-                                            iyy=cov1.iyy-cov2.iyy)
+                                         ixy=cov1.ixy-cov2.ixy,
+                                         iyy=cov1.iyy-cov2.iyy)
 
 
 string(self::Cov2) = "ixx: $(self.ixx) ixy: $(self.ixy) iyy: $(self.iyy)"
@@ -64,6 +91,9 @@ function test()
 
      println("cov1:",cov1)
      println("cov2:",cov2)
+
+     println("-cov1:",-cov1)
+     println("+cov1:",+cov1)
 
      println("cov1 + cov2:",cov1 + cov2)
      println("cov1 - cov2:",cov1 - cov2)

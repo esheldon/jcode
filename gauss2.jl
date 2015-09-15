@@ -15,6 +15,17 @@ export Gauss2
 # Gauss2
 #
 
+"""
+Gauss2(p, cen, cov)
+
+A 2-dimensional gaussian
+
+parameters
+----------
+- p::`Mfloat`    The total flux in the gaussian
+- cen::`Point2`  The center as a `Point2` object
+- cov::`Mfloat`  The covariance matrix as a `Cov2` object
+"""
 immutable Gauss2
     p::MFloat
 
@@ -45,11 +56,25 @@ show(io::Base.IO, self::Gauss2) = print(io,string(self))
 show(self::Gauss2) = show(STDOUT, self)
 
 
-function eval(self::Gauss2, pt::Point2)
-    eval(self, x=pt.x, y=pt.y)
-end
+"""
+val=gauss2.eval(g, y=, x=)
 
+Evaluate a 2-d gaussian at the specified location
 
+parameters
+----------
+- self::`Gauss2` The 2-d gaussian
+- y::`MFloat` **keyword** The y location
+- x::`MFloat` **keyword** The x location
+
+returns
+-------
+- val::`Mfloat` The value at the specified location
+
+Alternatively, you can call as val=gauss2.eval(g, pt)
+
+- pt::`Point2` The location to evaluate the gaussian as a `Point2` object
+"""
 function eval(self::Gauss2; x::MFloat=0.0, y::MFloat=0.0)
 
     cen = self.cen
@@ -69,6 +94,11 @@ function eval(self::Gauss2; x::MFloat=0.0, y::MFloat=0.0)
 
     val
 end
+
+function eval(self::Gauss2, pt::Point2)
+    eval(self, x=pt.x, y=pt.y)
+end
+
 
 
 
