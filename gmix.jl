@@ -1,13 +1,8 @@
 """
-uses immutable Gauss2, but GMix is still mutable so
-    that it's vector of Gauss2 does not have to be
-    copied all the time
+2-d Gaussian mixtures for images
 
-Defines the following types
-
-SimplePars
 GMix
-
+SimplePars
 """
 module gmix
 
@@ -54,19 +49,27 @@ const MAX_CHI2 = 25.0
 
 typealias GMixModel Int
 
-type SimplePars
+"""
+SimplePars
 
+hold the parameters for a gaussian mixture model.  Basically just
+wraps a vector and verifies against the model types
+"""
+type SimplePars
     model::GMixModel
     model_name::String
     pars::Vector{MFloat}
 
+    """
+    pars=SimplePars(model, pars)
+    
+    Constructor for SimplePars
+
+    parameters
+    ----------
+    model::`string` or `number`  e.g. "exp" or gmix.EXP
+    """
     function SimplePars(model, parsin)
-        """
-        parameters
-        ----------
-        model can either be the string or number version,
-        e.g. "exp" or EXP
-        """
 
         if !(model in keys(SIMPLE_MODEL_NAMES))
             throw(error("bad simple gmix model: $model"))
@@ -108,6 +111,19 @@ show(self::SimplePars) = show(STDOUT, self)
 # GMix gaussian mixture
 #
 
+"""
+A gaussian mixture.
+
+Wraps a vector of Gauss2
+
+Constructors
+------------
+
+gm=GMix(num)
+
+- num::`Int` Number of gaussianx in mixture
+
+"""
 type GMix
     data::Vector{Gauss2}
 
@@ -141,10 +157,24 @@ end
 show(self::GMix) = show(STDOUT,self)
 
 # evaluation and properties
+"""
+val=gmix_eval(gmix, x=, y=, max_chi2=)
+
+Evaluate the gaussian mixture at the specified location
+
+parameters
+----------
+- self::`GMix` A gaussian mixture
+- x::`float` **keyword** The x position at which to evaluate
+- y::`float` **keyword** The y position at which to evaluate
+- max_chi2::`float`  **keyword, optional** The maximum chi^2 at which to 
+evaluate.  Zero is returned for larger values.
+
+returns
+------------
+- val::`float` The value
+"""
 function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0, max_chi2::MFloat=9.999e9)
-    """
-    Evaluate the gaussian mixture at the specified location
-    """
     val::MFloat = 0.0
 
     for i=1:length(self)
@@ -165,16 +195,29 @@ function gmix_eval(self::GMix; x::MFloat=0.0, y::MFloat=0.0, max_chi2::MFloat=9.
     val
 end
 
-function gmix_eval(self::GMix, pt::Point2)
-    """
-    Evaluate the gaussian mixture at the specified location
-    """
+"""
+Alternatively, can be called as val=gmix_eval(gmix,pt) instead of x=, y=
 
-    gmix_eval(self, x=pt.x, y=pt.y)
+- pt::`Point2` The position at which to evaluate, as a `Point2` object
+"""
+function gmix_eval(self::GMix, pt::Point2, max_chi2::MFloat=9.999e9)
+    gmix_eval(self, x=pt.x, y=pt.y, max_chi2=max_chi2)
 end
 
 
+"""
+cen=get_cen(gmix)
 
+Get the mean center of the gaussian mixture
+
+parameters
+----------
+- gmix::`GMix` The gaussian mixture
+
+returns
+--------
+- cen::`Point2` The new center as a Point2 object
+"""
 function get_cen(self::GMix)
     x::MFloat = 0
     y::MFloat = 0
@@ -192,17 +235,21 @@ function get_cen(self::GMix)
     Point2(x=x, y=y)
 end
 
+"""
+set_cen!(gmix, point)
+
+Set the mean center of the gaussian mixture
+
+parameters
+----------
+- gmix::`GMix` The gaussian mixture
+- point::`Point2` The new center as a Point2
+"""
 function set_cen!(self::GMix, pt::Point2)
-    set_cen!(self, x=pt.x, y=pt.y)
-end
-
-
-function set_cen!(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
-
     pt_cur = get_cen(self)
 
-    x_shift = x-pt_cur.x
-    y_shift = y-pt_cur.y
+    x_shift = pt.x-pt_cur.x
+    y_shift = pt.y-pt_cur.y
 
     pshift = Point2(x=x_shift, y=y_shift)
 
@@ -213,10 +260,20 @@ function set_cen!(self::GMix; x::MFloat=0.0, y::MFloat=0.0)
     end
 end
 
+"""
+T=get_T(gmix)
+
+Get T = Ixx + Iyy. use the parallel axis theorem for off-center components
+
+parameters
+----------
+- gmix::`GMix` The gaussian mixture
+
+returns
+--------
+- T::`float` T=Ixx + Iyy
+"""
 function get_T(self::GMix)
-    """
-    use the parallel axis theorem
-    """
     psum::MFloat = 0
 
     ixx::MFloat = 0
@@ -241,7 +298,21 @@ function get_T(self::GMix)
     ixx + iyy
 end
 
+"""
+p=get_psum(gmix)
+
+Get the total flux "psum"
+
+parameters
+----------
+- gmix::`GMix` The gaussian mixture
+
+returns
+--------
+- p::`float` The total flux
+"""
 function get_psum(self::GMix)
+
     psum::MFloat = 0
 
     for i=1:length(self)
@@ -249,6 +320,21 @@ function get_psum(self::GMix)
     end
     psum
 end
+
+"""
+set_psum!(gmix)
+
+Set the total flux "psum"
+
+parameters
+----------
+- gmix::`GMix` The gaussian mixture
+- psum::`float` The flux to set
+
+returns
+--------
+- flux::`float` The new flux
+"""
 function set_psum!(self::GMix, psum::MFloat)
     psum_cur = get_psum(self)
     rat = psum/psum_cur
@@ -261,25 +347,48 @@ function set_psum!(self::GMix, psum::MFloat)
 end
 
 
+#
 # convolutions
+#
+"""
+gm_new = convolve(gm1,psf)
+
+Convolve a gaussian mixture with a psf to get a new mixture
+
+parameters
+----------
+- obj::`GMix` The gaussian mixture
+- psf::`GMix` The gaussian mixture representing a psf
+
+returns
+-------
+- new_gmix::`GMix` The convolved GMix object
+"""
 function convolve(obj::GMix, psf::GMix)
-    """
-    Convolve a gaussian mixture with a psf to get a new mixture
-    """
 
     ntot = length(obj) * length(psf)
 
     self = GMix(ntot)
 
-    convolve_fill!(self, obj, psf)
+    convolve_inplace!(self, obj, psf)
 
     self
 end
 
-function convolve_fill!(self::GMix, obj::GMix, psf::GMix)
-    """
-    Convolve two gaussian mixtures, storing in self
-    """
+"""
+convolve_inplace!(self,gm1,psf)
+
+Convolve a gaussian mixture with a psf and store in the 
+provided GMix
+
+parameters
+----------
+- self::`GMix` The gaussian mixture to fill. Must have len=length(obj)*length(psf)
+- obj::`GMix` The gaussian mixture
+- psf::`GMix` The gaussian mixture representing a psf
+"""
+
+function convolve_inplace!(self::GMix, obj::GMix, psf::GMix)
     ntot = length(obj) * length(psf)
 
     sz=length(self)
@@ -307,47 +416,55 @@ end
 
 
 
+#
 # creating models
-function simple_zeros(model) 
-    """
-    make a gmix model, all zeros
-    """
-    ngauss=GMIX_SIMPLE_NGAUSS[model]
-    return GMix(ngauss)
-end
-function make_simple(pars::SimplePars)
-    """
-    make a gmix model
+#
 
-    parameters
-    ----------
-    pars: SimplePars
-        A full SimplePars instance
-    """
-    self=simple_zeros(pars.model)
+"""
+gm=make_simple(spars)
+
+make a gmix model
+
+parameters
+----------
+- pars::`SimplePars` A full SimplePars instance
+
+returns
+-------
+- gm::`GMix`  The gaussian mixture
+"""
+
+function make_simple(pars::SimplePars)
+    ngauss=GMIX_SIMPLE_NGAUSS[pars.model]
+    self=GMix(ngauss)
 
     fill_simple!(self, pars)
 
     return self
 end
-function make_simple(model, pars)
-    """
-    make a gmix model
 
-    parameters
-    ----------
-    model: model indicator
-        e.g. EXP or "exp"
-    pars: array
-        e.g. [cen1,cen2,g1,g2,T,flux]
-    """
+"""
+Alternatively, call as make_simple(model, pars)
+----------
+- model::`model indicator` e.g. gmix.EXP or "exp"
+- pars::`Array` e.g. [cen1,cen2,g1,g2,T,flux]
+"""
+function make_simple(model, pars)
     gp = SimplePars(model, pars)
     return make_simple(gp)
 end
 
 
+"""
+fill_simple!(self, pars)
 
-# filling existing gmix objects from parameters
+Fill an existing GMix object from parameters
+
+parameters
+----------
+- self::`GMix` The gaussian mixture to fill
+- pars::`SimplePars` The full SimplePars object
+"""
 function fill_simple!(self::GMix, pars::SimplePars)
     if pars.model==EXP
         fill_exp!(self, pars)
@@ -508,10 +625,13 @@ const PVALS_GAUSS = MFloat[1.0]
 # rendering the mixture into an image
 #
 
+"""
+im=make_image(gmix, dims)
+
+Make a new image, filled with a rendering of the mixture
+
+"""
 function make_image(self::GMix, dims)
-    """
-    Get a new image with a rendering of the mixture
-    """
     im=zeros(MFloat,dims)
     draw_image!(self, im)
     im
