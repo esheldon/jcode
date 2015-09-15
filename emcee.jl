@@ -4,8 +4,18 @@ affine invariante sampler is implemented
 
 example
 -------
+
+    using emcee
+    sampler=Sampler(nwalkers, ndim, lnprob_func, x, y, yerr)
+    plast,lnplast = sample!(sampler, pstart, burnin)
+    p,lnp = sample!(sampler, plast, nstep, lnprob=lnplast)
+
+    chain=flatchain(sampler)
+    stats=getstats(chain)
 """
 module emcee
+
+import Base.string, Base.show
 
 export Sampler, sample!, flatchain, getstats
 
@@ -57,41 +67,43 @@ type Sampler
     end
 end
 
+string(self::Sampler) = """
+nwalkers: $(self.nwalkers)
+ndim:     $(self.ndim)
+a:        $(self.a)
+"""
+show(io::Base.IO, self::Sampler) = print(io,string(self))
+show(self::Sampler) = show(STDOUT, self)
+
+"""
+p,lnp = sample!(sampler, pstart, niter, lnprob=)
+
+Sample the posterior.  The internal chain is modified.
+
+parameters
+----------
+- self::`Sampler` The sampler.
+- pstart::Array{Float64,2} The starting position, shape (nwalkers,ndim)
+- niter::Int
+    Number of iterations to perform
+lnprob::`Float64` **keyword, optional** The lnprob values for the input pstart, if not sent will be calculated
+
+returns
+-------
+(p, lnprob)
+- p::`Array{Float64,2}` The last position for each walker
+- lnprob:`Vector{Float64}` The last lnprob values for each walker. Can be sent to this function to continue the chain.
+"""
 function sample!(self::Sampler,
                  pstart::Array{Float64,2}, # (nwalkers,ndim)
                  niter::Int;
                  lnprob=None)
-    """
-    sample the posterior.  Internal chain is overwritten
-
-    parameters
-    ----------
-    self::Sampler
-        The sampler. The internal chain, lnprop,niter,naccepted
-        values are modified.
-    pstart::Array{Float64,2}
-        The starting position, shape (nwalkers,ndim)
-    niter::Int
-        Number of iterations to perform
-    lnprob: optional 
-        The lnprob values for the input pstart, if not
-        sent will be calculated
-
-    output
-    ------
-    p, lnprob
-        The last positions and lnprob values from the
-        chain.  Can be sent to this function to continue
-        the chain.
-    """
     p = deepcopy(pstart) # current set of parameters
     check_inputs(self, p)
     halfk=fld(self.nwalkers,2)
 
     self.niter=niter
-    #self.chain = zeros(self.ndim, self.niter, self.nwalkers)
     self.chain = zeros(self.nwalkers, self.niter, self.ndim)
-    #self.lnprob = zeros(self.niter, self.nwalkers)
     self.lnprob = zeros(self.nwalkers, self.niter)
     self.naccepted = zeros(self.nwalkers)
     
@@ -119,7 +131,6 @@ function sample!(self::Sampler,
             end
         end
 
-        #self.chain[:,iter,:] = reshape(p, (self.ndim,1,self.nwalkers))
         self.chain[:,iter,:] = p
         self.lnprob[:,iter] = lnprob
     end
@@ -128,86 +139,41 @@ function sample!(self::Sampler,
 end
 
 
-function propose_stretch(self::Sampler,
-                         p1::Array{Float64,2},
-                         p2::Array{Float64,2},
-                         lnp1::Vector{Float64})
-    """
-    The Goodman and Weare proposal function and acceptance
-    criteria
-    """
-    nw1 = size(p1,1) # number of walkers
-    nw2 = size(p2,1)
+"""
+chain=flatchain(sampler)
 
-    q=zeros( (nw1,self.ndim) )
-    newlnprob = zeros(nw1)
-    accept = zeros(Bool, nw1)
+Flatten the chain
 
-    for i1=1:nw1
-        z = ((self.a - 1.) * rand() + 1)^2 / self.a
-        i2 = rand(1:nw2)
+parameters
+----------
+- sampler::`Sampler` The emcee sampler
 
-        for j=1:self.ndim
-            q[i1,j] = p2[i2,j] - z * (p2[i2,j] - p1[i1,j])
-        end
-
-        vq = vec(q[i1,:] )
-        newlnprob[i1] = self.lnprobfn(vq, self.args...)
-
-        lnpdiff = (self.ndim - 1.) * log(z) + newlnprob[i1] - lnp1[i1]
-        accept[i1] = lnpdiff > log(rand())
-    end
-
-    return q, newlnprob, accept
-
-end
-
-
-function get_lnprob_walkers(self::Sampler,
-                            pars::Array{Float64,2})
-    """
-    Get lnprob for each walker in the pars array
-    """
-    nwalkers=size(pars,1)
-    lnprob = zeros(nwalkers)
-    for i=1:nwalkers
-        tpars = vec( pars[i,:] )
-        lnprob[i] = self.lnprobfn(tpars, self.args...)
-    end
-
-    return lnprob
-end
-
+output
+------
+- chain::`Array{Float64,2}` The chain, flattened across walkers
+"""
 function flatchain(self::Sampler)
-    """
-    Flatten the chain
-
-    parameters
-    ----------
-    sampler:
-        The sampler
-
-    output
-    ------
-    The flattened chain of shape (ndim, niter*nwalkers)
-    """
     dims=size(self.chain)
     flatdims = (dims[1] * dims[2], dims[3])
     return reshape(self.chain, flatdims)
 end
 
+"""
+mean, cov = getstats(chain)
+
+parameters
+----------
+- chain::`Array{Float64,2}` The flattened chain
+
+returns
+-------
+(meanpars,cov)
+
+- mean::`Vector{Float64}` [ndim] array of means
+- cov::`Array{Float64,2}` [ndim,ndim] covariance array
+"""
+
 function getstats(fchain::Array{Float64,2})
-    """
-    parameters
-    ----------
-    fchain: Array{Float64,4}
-        The flattened chain
-    
-    returns
-    -------
-    meanpars,cov
-        mean[ndim] and covariance[ndim,ndim]
-    """
 
     nstep,ndim=size(fchain)
 
@@ -236,6 +202,56 @@ function getstats(fchain::Array{Float64,2})
     end
 
     return meanpars, cov
+end
+
+"""
+Get lnprob for each walker in the pars array
+"""
+function get_lnprob_walkers(self::Sampler,
+                            pars::Array{Float64,2})
+    nwalkers=size(pars,1)
+    lnprob = zeros(nwalkers)
+    for i=1:nwalkers
+        tpars = vec( pars[i,:] )
+        lnprob[i] = self.lnprobfn(tpars, self.args...)
+    end
+
+    return lnprob
+end
+
+
+"""
+The Goodman and Weare proposal function and acceptance
+criteria
+"""
+function propose_stretch(self::Sampler,
+                         p1::Array{Float64,2},
+                         p2::Array{Float64,2},
+                         lnp1::Vector{Float64})
+    nw1 = size(p1,1) # number of walkers
+    nw2 = size(p2,1)
+
+    q=zeros( (nw1,self.ndim) )
+    newlnprob = zeros(nw1)
+    accept = zeros(Bool, nw1)
+
+    for i1=1:nw1
+        z = ((self.a - 1.) * rand() + 1)^2 / self.a
+        i2 = rand(1:nw2)
+
+        for j=1:self.ndim
+            q[i1,j] = p2[i2,j] - z * (p2[i2,j] - p1[i1,j])
+        end
+
+        vq = vec(q[i1,:] )
+        newlnprob[i1] = self.lnprobfn(vq, self.args...)
+
+        lnpdiff = (self.ndim - 1.) * log(z) + newlnprob[i1] - lnp1[i1]
+        accept[i1] = lnpdiff > log(rand())
+    end
+
+    return q, newlnprob, accept
+
 end
 
 
